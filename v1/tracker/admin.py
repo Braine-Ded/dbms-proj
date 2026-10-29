@@ -32,6 +32,11 @@ def kcal(value):
     return f"{round(float(value or 0)):,}"
 
 
+def short_date(value, rest=""):
+    """'5 Mar' plus the rest of the format; %-d isn't supported on Windows."""
+    return f"{value.day} {value.strftime('%b' + rest)}"
+
+
 def changelist(model, **filters):
     url = reverse(f"admin:tracker_{model}_changelist")
     return url + ("?" + "&".join(f"{k}={v}" for k, v in filters.items()) if filters else "")
@@ -118,11 +123,11 @@ class UserAdmin(ModelAdmin):
 
     @display(description="Joined", ordering="date_joined")
     def joined(self, obj):
-        return obj.date_joined.strftime("%-d %b %y")
+        return short_date(obj.date_joined, " %y")
 
     @display(description="Last sign-in", ordering="last_login")
     def last_sign_in(self, obj):
-        return obj.last_login.strftime("%-d %b %H:%M") if obj.last_login else "never"
+        return short_date(obj.last_login, " %H:%M") if obj.last_login else "never"
 
     @display(description="Age", ordering="dob")
     def age_years(self, obj):
@@ -405,7 +410,7 @@ GROUP BY f.food_id, f.name, f.food_type ORDER BY times DESC LIMIT 5""")
         "top_foods": {"headers": ["Food", "Logged", "kcal"],
                       "rows": [[n, c, kcal(k)] for n, t, c, k in top_foods]},
         "newest": {"headers": ["Username", "Joined", "Last sign-in"],
-                   "rows": [[u.username, u.date_joined.strftime("%-d %b"),
-                             u.last_login.strftime("%-d %b %H:%M") if u.last_login else "never"] for u in newest]},
+                   "rows": [[u.username, short_date(u.date_joined),
+                             short_date(u.last_login, " %H:%M") if u.last_login else "never"] for u in newest]},
     })
     return context
