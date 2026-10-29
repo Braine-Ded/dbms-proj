@@ -1,7 +1,11 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path, re_path
+from django.views.decorators.cache import never_cache
 from django.views.static import serve
+
+# no browser caching, so a changed app.js / style.css shows up on the next reload
+serve = never_cache(serve)
 
 urlpatterns = [
     path("admin/", admin.site.urls),

@@ -14,6 +14,7 @@ const state = {
   foods: [], burns: [], days: 28,
   // Food & exercise page
   catMode: 'food', catFilter: { food: 'All', burn: 'All' }, pick: { food: null, burn: null }, amount: { food: 1, burn: 30 }, search: '',
+  logDate: null, logDay: null,  // the day the Food & exercise page adds to
 };
 const charts = {};
 
@@ -233,6 +234,7 @@ function signedOut(message) {
   state.me = null;
   Object.assign(state, {
     days: 28, catMode: 'food', catFilter: { food: 'All', burn: 'All' }, pick: { food: null, burn: null }, amount: { food: 1, burn: 30 }, search: '',
+    logDate: null, logDay: null,
   });
   $('#cat-search').value = '';
   document.body.classList.remove('is-staff');
@@ -345,7 +347,8 @@ async function loadDay() {
       <span class="entry-kcal">${kcal(b.calories)}</span>
       <button class="x-btn" data-del-burn="${b.burn_id}" aria-label="Remove ${esc(b.burn_name)}">✕</button>
     </li>`).join('') : '<li class="empty">No workouts yet. Rest days count too.</li>';
-  document.querySelectorAll('.save-bar').forEach((bar) => { bar.hidden = true; });
+  updateSaveBar('food');
+  updateSaveBar('burn');
 }
 
 async function refreshDay() {
@@ -379,9 +382,21 @@ document.addEventListener('input', (e) => {
   const li = t.closest('li');
   li.classList.toggle('dirty', Number(t.value) !== Number(t.dataset.orig));
   li.querySelector('.entry-kcal').textContent = kcal(Number(t.value) * Number(t.dataset.per));
-  const kind = t.dataset.food ? 'food' : 'burn';
-  $(`.save-bar[data-bar=${kind}]`).hidden = !$(`#${kind}-entries li.dirty`);
+  updateSaveBar(t.dataset.food ? 'food' : 'burn');
 });
+
+// always on screen while there are entries: says whether the list matches the database
+function updateSaveBar(kind) {
+  const bar = $(`.save-bar[data-bar=${kind}]`);
+  const dirty = document.querySelectorAll(`#${kind}-entries li.dirty`).length;
+  bar.hidden = !document.querySelector(`#${kind}-entries .entry-qty`);
+  bar.classList.toggle('pending', dirty > 0);
+  bar.querySelector('.save-state').textContent = dirty
+    ? `${dirty} unsaved ${dirty === 1 ? 'change' : 'changes'}`
+    : `Saved. Change ${kind === 'food' ? 'servings' : 'minutes'} above, then save.`;
+  bar.querySelector('[data-save]').disabled = !dirty;
+  bar.querySelector('[data-discard]').hidden = !dirty;
+}
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || !e.target.classList.contains('entry-qty')) return;
   $(`[data-save=${e.target.dataset.food ? 'food' : 'burn'}]`).click();
@@ -593,19 +608,31 @@ const CAT = {
   food: {
     items: () => state.foods, id: 'food_id', name: 'name', type: 'food_type', value: 'calories_per_serving',
     types: FOOD_TYPES, noun: 'food', unit: 'kcal per serving', form: '#add-food-form',
-    lede: 'What a serving costs, and how long it takes to burn it off.',
+    lede: 'Pick a food to see what it costs and how long it takes to burn off, then add it to your day.',
   },
   burn: {
     items: () => state.burns, id: 'burn_id', name: 'burn_name', type: 'burn_type', value: 'calories_per_min',
     types: BURN_TYPES, noun: 'exercise', unit: 'kcal per minute', form: '#add-burn-form',
-    lede: 'How hard each workout burns, and what it pays for.',
+    lede: 'Pick an exercise to see how hard it burns and what it pays for, then add it to your day.',
   },
 };
 const fmt1 = (n) => (Math.round(n * 10) / 10).toLocaleString('en-IN');
 
 async function loadCatalogue() {
-  await loadCatalogLists();
+  state.logDate ??= state.today;
+  await Promise.all([loadCatalogLists(), loadLogDay()]);
   renderCatalogue();
+}
+async function loadLogDay() {
+  state.logDay = await api('GET', 'day?date=' + state.logDate);
+}
+const logDayName = () => state.logDate === state.today ? 'today' : prettyDate(state.logDate);
+// how much of an item the chosen day already has (servings or minutes), or 0
+function alreadyLogged(mode, id) {
+  const day = state.logDay;
+  if (!day) return 0;
+  const hit = mode === 'food' ? day.foods.find((f) => f.food_id == id) : day.burns.find((b) => b.burn_id == id);
+  return hit ? Number(mode === 'food' ? hit.servings : hit.duration_min) : 0;
 }
 
 function renderCatalogue() {
@@ -635,7 +662,7 @@ function renderCatalogue() {
   $('#cat-count').textContent = `${rows.length} of ${all.length}`;
   $('#cat-list').innerHTML = rows.map((i) => `
     <li><button class="rank-row ${i[c.id] == state.pick[mode] ? 'on' : ''}" data-pick="${i[c.id]}">
-      <span class="rank-name">${esc(i[c.name])}<small>${i[c.type]}</small></span>
+      <span class="rank-name">${esc(i[c.name])}<small>${i[c.type]}${alreadyLogged(mode, i[c.id]) ? `<em class="logged-tag">logged ${logDayName() === 'today' ? 'today' : 'that day'}</em>` : ''}</small></span>
       <span class="rank-bar"><i style="--w:${(100 * i[c.value] / max).toFixed(1)}%"></i></span>
       <b>${fmt1(i[c.value])}</b>
     </button></li>`).join('') || '<li class="empty">Nothing matches. Try another type or search.</li>';
@@ -651,12 +678,21 @@ function renderDetail() {
     <span class="detail-type">${item[c.type]}</span>
     <h2>${esc(item[c.name])}</h2>
     <p class="muted">${fmt1(item[c.value])} ${c.unit}. ${item.times_logged ? `Logged ${item.times_logged === 1 ? 'once' : item.times_logged + ' times'} across all athletes.` : 'Nobody has logged it yet.'}</p>
-    <label class="amount">
-      <input type="number" id="cat-amount" min="${food ? 0.25 : 1}" step="${food ? 0.25 : 5}" value="${state.amount[mode]}" aria-label="${food ? 'Servings' : 'Minutes'}">
-      <span>${food ? 'serving(s)' : 'minutes'} = <b id="cat-total"></b></span>
-    </label>
+    <form class="log-box" id="cat-log">
+      <h3>Add to your log</h3>
+      <div class="log-fields">
+        <label class="amount">
+          <input type="number" id="cat-amount" min="${food ? 0.25 : 1}" step="${food ? 0.25 : 5}" value="${state.amount[mode]}" required aria-label="${food ? 'Servings' : 'Minutes'}">
+          <span>${food ? 'serving(s)' : 'minutes'} = <b id="cat-total"></b></span>
+        </label>
+        <label class="log-day">Day <input type="date" id="cat-day" value="${state.logDate}" max="${state.today}" required></label>
+      </div>
+      <button class="btn ${food ? 'btn-food' : 'btn-move'} log-go" id="cat-log-btn"></button>
+      <p class="log-impact" id="cat-impact"></p>
+    </form>
     <h3 class="effects-title">${food ? 'Fastest ways to burn it off' : 'Burns about as much as'}</h3>
-    <ol class="effects" id="cat-effects"></ol>
+    ${food ? `<p class="muted small">Click Log to add one of these workouts to ${logDayName()}.</p>` : ''}
+    <ol class="effects ${food ? 'with-log' : ''}" id="cat-effects"></ol>
     <div class="detail-actions staff-only">
       <button class="btn btn-ghost btn-sm" data-edit-${mode}="${item[c.id]}">Edit</button>
       <button class="btn btn-ghost btn-sm del" data-delete-${mode}="${item[c.id]}">Delete</button>
@@ -667,10 +703,24 @@ function renderDetail() {
 // the part that changes as the amount is typed (keeps focus in the input)
 function renderEffects(item) {
   const mode = state.catMode, c = CAT[mode];
-  const total = Number(item[c.value]) * (Number(state.amount[mode]) || 0);
+  const amount = Number(state.amount[mode]) || 0;
+  const total = Number(item[c.value]) * amount;
   $('#cat-total').textContent = kcal(total) + ' kcal';
+
+  // what adding it does to the chosen day
+  const food = mode === 'food';
+  const dayName = logDayName();
+  const whose = dayName === 'today' ? "today's" : dayName + "'s";
+  $('#cat-log-btn').textContent = food
+    ? `Add ${fmt1(amount)} serving${amount === 1 ? '' : 's'} to ${whose} meals`
+    : `Add ${fmt1(amount)} min to ${whose} workouts`;
+  const day = state.logDay || { calories_in: 0, calories_out: 0 };
+  const before = Number(food ? day.calories_in : day.calories_out);
+  const have = alreadyLogged(mode, item[c.id]);
+  $('#cat-impact').innerHTML = `${dayName === 'today' ? 'Today' : 'On ' + dayName} you've ${food ? 'eaten' : 'burnt'} <b>${kcal(before)} kcal</b>. This makes it <b>${kcal(before + total)} kcal</b>.`
+    + (have ? ` Already logged: ${fmt1(have)} ${food ? 'serving(s)' : 'min'}, so this adds to it.` : '');
   const rows = mode === 'food'
-    ? state.burns.map((b) => ({ name: b.burn_name, type: b.burn_type, v: total / Number(b.calories_per_min), unit: 'min' }))
+    ? state.burns.map((b) => ({ id: b.burn_id, name: b.burn_name, type: b.burn_type, v: total / Number(b.calories_per_min), unit: 'min' }))
       .sort((x, y) => x.v - y.v).slice(0, 8)
     // the most logged real meals (a 5 kcal black coffee would dwarf every other bar)
     : state.foods.filter((f) => f.calories_per_serving >= 50).sort((x, y) => y.times_logged - x.times_logged).slice(0, 8)
@@ -681,10 +731,29 @@ function renderEffects(item) {
       <span class="rank-name">${esc(r.name)}<small>${r.type}</small></span>
       <span class="rank-bar"><i style="--w:${(100 * r.v / max).toFixed(1)}%"></i></span>
       <b>${r.unit === 'min' ? kcal(r.v) : fmt1(r.v)}<small> ${r.unit}</small></b>
+      ${r.id ? `<button class="row-log" data-log-burn="${r.id}" data-min="${Math.max(1, Math.round(r.v))}" aria-label="Log ${Math.max(1, Math.round(r.v))} min of ${esc(r.name)}">Log</button>` : ''}
     </li>`).join('');
 }
 
 $('#cat-search').addEventListener('input', (e) => { state.search = e.target.value; renderCatalogue(); });
+document.addEventListener('change', async (e) => {
+  if (e.target.id !== 'cat-day' || !e.target.value || e.target.value > state.today) return;
+  state.logDate = e.target.value;
+  await loadLogDay();
+  renderCatalogue();
+});
+document.addEventListener('submit', async (e) => {
+  if (e.target.id !== 'cat-log') return;
+  e.preventDefault();
+  const mode = state.catMode, c = CAT[mode];
+  const item = c.items().find((i) => i[c.id] == state.pick[mode]);
+  const amount = Number(state.amount[mode]);
+  if (!(amount > 0)) return toast(mode === 'food' ? 'Servings must be more than 0' : 'Minutes must be more than 0', 'bad');
+  if (mode === 'food') await api('POST', 'day/food', { date: state.logDate, food_id: item.food_id, servings: amount });
+  else await api('POST', 'day/burn', { date: state.logDate, burn_id: item.burn_id, duration_min: Math.round(amount) });
+  toast(`Added ${fmt1(amount)} ${mode === 'food' ? '×' : 'min of'} ${item[c.name]} to ${logDayName()}`, 'good');
+  await loadCatalogue();
+});
 document.addEventListener('input', (e) => {
   if (e.target.id !== 'cat-amount') return;
   state.amount[state.catMode] = e.target.value;
@@ -745,6 +814,12 @@ const editBurn = catalogueForm('#add-burn-form', 'burn_id', 'burns', 'Add exerci
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('button');
   if (!b) return;
+  if (b.dataset.logBurn) {
+    const burn = state.burns.find((x) => x.burn_id == b.dataset.logBurn);
+    await api('POST', 'day/burn', { date: state.logDate, burn_id: burn.burn_id, duration_min: b.dataset.min });
+    toast(`Added ${b.dataset.min} min of ${burn.burn_name} to ${logDayName()}`, 'good');
+    await loadCatalogue();
+  }
   if (b.dataset.catChip) { state.catFilter[state.catMode] = b.dataset.catChip; renderCatalogue(); }
   if (b.dataset.pick) {
     state.pick[state.catMode] = b.dataset.pick;

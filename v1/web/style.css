@@ -300,7 +300,21 @@ td.num, th.num { text-align: right; }
 }
 .amount input { width: 84px; border: 1px solid var(--line-strong); border-radius: var(--r-control); padding: 6px 8px; background: var(--surface); text-align: right; }
 .amount b { font-stretch: var(--condensed); font-size: 1.35rem; font-weight: 800; }
-.effects-title { margin: 18px 0 4px; font-size: 1.05rem; }
+.effects-title { margin: 20px 0 4px; font-size: 1.05rem; }
+.log-box { margin: 16px 0 4px; padding: 14px; border-radius: var(--r-control); background: var(--chalk); border: 1px solid var(--line); }
+.log-box h3 { font-size: 1.05rem; margin-bottom: 8px; }
+.log-fields { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.log-box .amount { margin: 0; padding: 0; background: none; }
+.log-day { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: .875rem; color: var(--muted); }
+.log-day input { border: 1px solid var(--line-strong); border-radius: var(--r-control); padding: 5px 8px; background: var(--surface); color: var(--ink); }
+.log-go { width: 100%; margin-top: 12px; }
+.log-impact { margin-top: 8px; font-size: .875rem; color: var(--muted); }
+.log-impact b { color: var(--ink); }
+.effects.with-log li { grid-template-columns: minmax(100px, 1.2fr) minmax(40px, 1.2fr) 64px auto; }
+.row-log { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 2px 10px; font-size: .8125rem; font-weight: 700; cursor: pointer; }
+.row-log:hover { border-color: var(--track); background: var(--track-wash); color: var(--track-deep); }
+.logged-tag { font-style: normal; font-weight: 700; color: var(--turmeric-deep); margin-left: 8px; }
+.guide[data-mode=burn] .logged-tag { color: var(--track-deep); }
 .effects li { grid-template-columns: minmax(110px, 1.2fr) minmax(50px, 1.5fr) 74px; padding: 6px 0; border-top: 1px solid var(--line); }
 .effects li:first-child { border-top: 0; }
 /* a food's effects are workouts (burnt orange); an exercise's are foods (mustard) */
@@ -313,7 +327,11 @@ td.num, th.num { text-align: right; }
 .feed-move .entries li.dirty .entry-qty { border-color: var(--track); background: var(--track-wash); }
 .entries li.dirty .entry-kcal { color: var(--muted); }
 .save-bar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 10px; padding: 8px 10px; border-radius: var(--r-control); background: var(--chalk); }
-.save-bar span { margin-right: auto; font-size: .875rem; font-weight: 600; color: var(--muted); }
+.save-bar .save-state { margin-right: auto; font-size: .875rem; font-weight: 600; color: var(--muted); }
+.save-bar.pending { background: var(--turmeric-wash); }
+.feed-move .save-bar.pending { background: var(--track-wash); }
+.save-bar.pending .save-state { color: var(--ink); }
+.save-bar [data-save]:disabled { opacity: .45; cursor: default; }
 
 .account-head { justify-content: flex-start; align-items: center; }
 .account-head h1 { overflow-wrap: anywhere; }
