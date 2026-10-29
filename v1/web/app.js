@@ -218,7 +218,8 @@ function formError(form, msg) {
 
 async function busy(button, fn) {
   button.disabled = true;
-  try { return await fn(); } finally { button.disabled = false; }
+  button.setAttribute('aria-busy', 'true');
+  try { return await fn(); } finally { button.disabled = false; button.removeAttribute('aria-busy'); }
 }
 
 $('#login-form').addEventListener('submit', async (e) => {
@@ -847,6 +848,10 @@ document.querySelectorAll('#cat-seg button').forEach((b) => b.addEventListener('
   state.search = '';
   $('#cat-search').value = '';
   renderCatalogue();
+  const guide = $('#guide');  // replay the fade for the new list
+  guide.classList.remove('switched');
+  void guide.offsetWidth;
+  guide.classList.add('switched');
 }));
 
 function formTitle() {
