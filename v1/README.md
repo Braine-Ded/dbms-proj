@@ -23,7 +23,7 @@ tracker/sqlcapture.py   records the SQL behind each request; error messages for 
 web/                    the website (index.html, style.css, app.js)
 run.sh                  starts everything (./run.sh --reset rebuilds the database)
 DEMO.md                 step-by-step demo script for the judges
-db/judge_queries.sql    ~60 ready-made queries for the judges, each naming its tables
+db/judge_queries.sql    54 ready-made queries for the judges, each naming its tables
 ```
 
 ## 1. Set up the database (once)
