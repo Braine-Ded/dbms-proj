@@ -18,7 +18,7 @@ Press **F12** and open **Application → Local Storage**: the `stride-access` an
 
 ## 3. Website → DB
 
-Sign in as `haadi_runs` / `stride12345`. On **Today**, add **Poha × 2**. Then in Workbench:
+Sign in as `haadi_runs` / `stride12345`. On **Today**, add **Poha × 2** and click **Save changes**. Then in Workbench:
 
 ```sql
 SELECT * FROM vw_food_log WHERE username = 'haadi_runs' AND record_date = CURDATE();

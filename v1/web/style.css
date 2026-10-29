@@ -327,6 +327,11 @@ td.num, th.num { text-align: right; }
 .feed-move .entries li.dirty .entry-qty { border-color: var(--track); background: var(--track-wash); }
 .entries li.dirty .entry-kcal { color: var(--muted); }
 .save-bar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 10px; padding: 8px 10px; border-radius: var(--r-control); background: var(--chalk); }
+.entries li.removed .entry-name, .entries li.removed .entry-kcal { text-decoration: line-through; opacity: .5; }
+.new-tag { font-style: normal; font-size: .75rem; font-weight: 700; color: var(--turmeric-deep); background: var(--turmeric-wash); border-radius: 999px; padding: 1px 8px; margin-left: 8px; vertical-align: 2px; }
+.feed-move .new-tag { color: var(--track-deep); background: var(--track-wash); }
+@keyframes flash { from { background: var(--turmeric-wash); } to { background: transparent; } }
+.entries li.flash { animation: flash .8s ease-out; }
 .save-bar .save-state { margin-right: auto; font-size: .875rem; font-weight: 600; color: var(--muted); }
 .save-bar.pending { background: var(--turmeric-wash); }
 .feed-move .save-bar.pending { background: var(--track-wash); }

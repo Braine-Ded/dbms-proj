@@ -332,23 +332,32 @@ async function loadDay() {
       ? `You burnt ${kcal(-net)} kcal more than you ate.`
       : `You ate ${kcal(net)} kcal more than you burnt.`;
 
-  $('#food-entries').innerHTML = day.foods.length ? day.foods.map((f) => `
-    <li>
-      <span class="entry-name">${esc(f.name)}<span class="entry-type">${f.food_type}, ${f.calories_per_serving} kcal per serving</span></span>
-      <input class="entry-qty" type="number" min="0.25" step="0.25" value="${f.servings}" data-food="${f.food_id}" data-orig="${f.servings}" data-per="${f.calories_per_serving}" aria-label="Servings of ${esc(f.name)}">
-      <span class="entry-kcal">${kcal(f.calories)}</span>
-      <button class="x-btn" data-del-food="${f.food_id}" aria-label="Remove ${esc(f.name)}">✕</button>
-    </li>`).join('') : '<li class="empty">No meals logged. Pick a food below.</li>';
+  renderEntries('food');
+  renderEntries('burn');
+}
 
-  $('#burn-entries').innerHTML = day.burns.length ? day.burns.map((b) => `
-    <li>
-      <span class="entry-name">${esc(b.burn_name)}<span class="entry-type">${b.burn_type}, ${b.calories_per_min} kcal per minute</span></span>
-      <input class="entry-qty" type="number" min="1" step="1" value="${b.duration_min}" data-burn="${b.burn_id}" data-orig="${b.duration_min}" data-per="${b.calories_per_min}" aria-label="Minutes of ${esc(b.burn_name)}">
-      <span class="entry-kcal">${kcal(b.calories)}</span>
-      <button class="x-btn" data-del-burn="${b.burn_id}" aria-label="Remove ${esc(b.burn_name)}">✕</button>
-    </li>`).join('') : '<li class="empty">No workouts yet. Rest days count too.</li>';
-  updateSaveBar('food');
-  updateSaveBar('burn');
+// the list as saved in the database (also what "Discard" goes back to)
+function renderEntries(kind) {
+  const day = state.day;
+  $(`#${kind}-entries`).innerHTML = kind === 'food'
+    ? day.foods.map((f) => entryRow('food', f.food_id, f.servings)).join('') || '<li class="empty">No meals logged. Pick a food below.</li>'
+    : day.burns.map((b) => entryRow('burn', b.burn_id, b.duration_min)).join('') || '<li class="empty">No workouts yet. Rest days count too.</li>';
+  updateSaveBar(kind);
+}
+
+// one row of the Meals / Workouts list; orig is what the database holds (0 = not saved yet)
+function entryRow(kind, id, qty, orig = qty) {
+  const food = kind === 'food';
+  const item = food ? state.foods.find((f) => f.food_id == id) : state.burns.find((b) => b.burn_id == id);
+  const name = food ? item.name : item.burn_name;
+  const per = Number(food ? item.calories_per_serving : item.calories_per_min);
+  return `
+    <li class="${Number(orig) ? '' : 'dirty added'}">
+      <span class="entry-name">${esc(name)}${Number(orig) ? '' : '<em class="new-tag">not saved</em>'}<span class="entry-type">${food ? item.food_type : item.burn_type}, ${food ? per + ' kcal per serving' : fmt1(per) + ' kcal per minute'}</span></span>
+      <input class="entry-qty" type="number" min="${food ? 0.25 : 1}" step="${food ? 0.25 : 1}" value="${Number(qty)}" data-${kind}="${id}" data-orig="${Number(orig)}" data-per="${per}" aria-label="${food ? 'Servings' : 'Minutes'} of ${esc(name)}">
+      <span class="entry-kcal">${kcal(qty * per)}</span>
+      <button class="x-btn" data-remove="${kind}" aria-label="Remove ${esc(name)}">✕</button>
+    </li>`;
 }
 
 async function refreshDay() {
@@ -358,30 +367,56 @@ async function refreshDay() {
   loadLeaderboard();
 }
 
-$('#food-form').addEventListener('submit', async (e) => {
+// Adding, changing and removing entries only edits the list on screen; "Save changes"
+// then writes all of it to the database (INSERT / UPDATE / DELETE per row).
+const hasUnsaved = () => !!document.querySelector('.entries li.dirty');
+
+function stageEntry(kind, id, qty) {
+  if (!(qty > 0)) return toast(kind === 'food' ? 'Servings must be more than 0' : 'Minutes must be more than 0', 'bad');
+  const list = $(`#${kind}-entries`);
+  const input = list.querySelector(`.entry-qty[data-${kind}="${id}"]`);
+  if (input) {
+    // already in the list: add to it (the database adds the same way)
+    const li = input.closest('li');
+    if (li.classList.contains('removed')) toggleRemoved(li);
+    input.value = Number(input.value) + qty;
+    markRow(input);
+    li.classList.remove('flash'); void li.offsetWidth; li.classList.add('flash');
+  } else {
+    list.querySelector('.empty')?.remove();
+    list.insertAdjacentHTML('beforeend', entryRow(kind, id, qty, 0));
+  }
+  updateSaveBar(kind);
+}
+$('#food-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  await api('POST', 'day/food', { date: state.date, food_id: f.get('food_id'), servings: f.get('servings') });
-  toast('Meal added', 'good');
-  refreshDay();
+  stageEntry('food', f.get('food_id'), Number(f.get('servings')));
 });
-$('#burn-form').addEventListener('submit', async (e) => {
+$('#burn-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  await api('POST', 'day/burn', { date: state.date, burn_id: f.get('burn_id'), duration_min: f.get('duration_min') });
-  toast('Workout added', 'good');
-  refreshDay();
+  stageEntry('burn', f.get('burn_id'), Number(f.get('duration_min')));
 });
 
-// changed servings / minutes wait for "Save changes"; the row shows its new kcal meanwhile
-const hasUnsaved = () => !!document.querySelector('.entries li.dirty');
+function markRow(input) {
+  const li = input.closest('li');
+  li.classList.toggle('dirty', li.classList.contains('removed') || Number(input.value) !== Number(input.dataset.orig));
+  li.querySelector('.entry-kcal').textContent = kcal(Number(input.value) * Number(input.dataset.per));
+}
+function toggleRemoved(li) {
+  const btn = li.querySelector('[data-remove]');
+  const removed = li.classList.toggle('removed');
+  li.querySelector('.entry-qty').disabled = removed;
+  btn.textContent = removed ? '↺' : '✕';
+  btn.setAttribute('aria-label', (removed ? 'Keep ' : 'Remove ') + li.querySelector('.entry-name').firstChild.textContent);
+  markRow(li.querySelector('.entry-qty'));
+}
 
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (!t.classList.contains('entry-qty')) return;
-  const li = t.closest('li');
-  li.classList.toggle('dirty', Number(t.value) !== Number(t.dataset.orig));
-  li.querySelector('.entry-kcal').textContent = kcal(Number(t.value) * Number(t.dataset.per));
+  markRow(t);
   updateSaveBar(t.dataset.food ? 'food' : 'burn');
 });
 
@@ -389,11 +424,10 @@ document.addEventListener('input', (e) => {
 function updateSaveBar(kind) {
   const bar = $(`.save-bar[data-bar=${kind}]`);
   const dirty = document.querySelectorAll(`#${kind}-entries li.dirty`).length;
-  bar.hidden = !document.querySelector(`#${kind}-entries .entry-qty`);
   bar.classList.toggle('pending', dirty > 0);
   bar.querySelector('.save-state').textContent = dirty
     ? `${dirty} unsaved ${dirty === 1 ? 'change' : 'changes'}`
-    : `Saved. Change ${kind === 'food' ? 'servings' : 'minutes'} above, then save.`;
+    : `All saved. Add, change or remove ${kind === 'food' ? 'meals' : 'workouts'}, then save.`;
   bar.querySelector('[data-save]').disabled = !dirty;
   bar.querySelector('[data-discard]').hidden = !dirty;
 }
@@ -402,14 +436,25 @@ document.addEventListener('keydown', (e) => {
   $(`[data-save=${e.target.dataset.food ? 'food' : 'burn'}]`).click();
 });
 
-async function saveEntries(kind) {
-  const inputs = [...document.querySelectorAll(`#${kind}-entries li.dirty .entry-qty`)];
-  const bad = inputs.find((i) => !(Number(i.value) > 0));
-  if (bad) { bad.focus(); return toast(kind === 'food' ? 'Servings must be more than 0' : 'Minutes must be more than 0', 'bad'); }
+// saves the pending changes of both lists (reloading the day would lose the other list's otherwise)
+async function saveEntries() {
+  const rows = [...document.querySelectorAll('.entries li.dirty')];
+  const bad = rows.find((li) => !li.classList.contains('removed') && !(Number(li.querySelector('.entry-qty').value) > 0));
+  if (bad) { bad.querySelector('.entry-qty').focus(); return toast(bad.querySelector('[data-food]') ? 'Servings must be more than 0' : 'Minutes must be more than 0', 'bad'); }
   try {
-    for (const i of inputs) {
-      if (kind === 'food') await api('PUT', 'day/food', { daily_id: state.day.daily_id, food_id: i.dataset.food, servings: i.value });
-      else await api('PUT', 'day/burn', { daily_id: state.day.daily_id, burn_id: i.dataset.burn, duration_min: i.value });
+    for (const li of rows) {
+      const kind = li.querySelector('[data-food]') ? 'food' : 'burn';
+      const [path, idKey, qtyKey] = kind === 'food' ? ['day/food', 'food_id', 'servings'] : ['day/burn', 'burn_id', 'duration_min'];
+      const input = li.querySelector('.entry-qty');
+      const id = input.dataset[kind];
+      const isNew = Number(input.dataset.orig) === 0;
+      if (li.classList.contains('removed')) {
+        if (!isNew) await api('DELETE', `${path}?daily_id=${state.day.daily_id}&${idKey}=${id}`);
+      } else if (isNew) {
+        await api('POST', path, { date: state.date, [idKey]: id, [qtyKey]: input.value });  // creates the day if needed
+      } else {
+        await api('PUT', path, { daily_id: state.day.daily_id, [idKey]: id, [qtyKey]: input.value });
+      }
     }
     toast('Changes saved', 'good');
   } finally {
@@ -420,15 +465,15 @@ async function saveEntries(kind) {
 document.addEventListener('click', async (e) => {
   const t = e.target.closest('button');
   if (!t) return;
-  if (t.dataset.save) saveEntries(t.dataset.save);
-  if (t.hasAttribute('data-discard')) loadDay();
-  if (t.dataset.delFood) {
-    await api('DELETE', `day/food?daily_id=${state.day.daily_id}&food_id=${t.dataset.delFood}`);
-    refreshDay();
-  }
-  if (t.dataset.delBurn) {
-    await api('DELETE', `day/burn?daily_id=${state.day.daily_id}&burn_id=${t.dataset.delBurn}`);
-    refreshDay();
+  if (t.dataset.save) saveEntries();
+  if (t.hasAttribute('data-discard')) renderEntries(t.closest('.save-bar').dataset.bar);
+  if (t.dataset.remove) {
+    const li = t.closest('li');
+    if (li.classList.contains('added')) li.remove();  // never saved: just drop it
+    else toggleRemoved(li);
+    const list = $(`#${t.dataset.remove}-entries`);
+    if (!list.children.length) list.innerHTML = '<li class="empty">Nothing here. Add one below.</li>';
+    updateSaveBar(t.dataset.remove);
   }
 });
 

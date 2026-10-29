@@ -65,12 +65,12 @@ About 10 minutes. It follows the four judging criteria: **sign-in is authenticat
 
 Signed in as `haadi_runs`, on **Today**:
 
-1. Add a food, for example **Poha × 2**, then run:
+1. Add a food, for example **Poha × 2**. It shows as "not saved" and nothing is in the database yet. Click **Save changes**, then run:
    ```sql
    SELECT * FROM vw_food_log WHERE username = 'haadi_runs' AND record_date = CURDATE();
    ```
    The new row is there.
-2. Change its servings and click **Save changes** (nothing is written until then), then run the query again: the row is updated. Remove the food: the row is gone.
+2. Change its servings and click **Save changes**, then run the query again: the row is updated. Remove the food (✕, then **Save changes**): the row is gone.
 3. Add a workout, then run:
    ```sql
    SELECT * FROM vw_burn_log WHERE username = 'haadi_runs' AND record_date = CURDATE();
