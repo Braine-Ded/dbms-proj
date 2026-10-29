@@ -24,6 +24,7 @@ tracker/sqlcapture.py   records the SQL behind each request; error messages for 
 tracker/inspector.py    the SQL tab: SQL source viewer, script runner, examples
 web/                    the website (index.html, style.css, app.js)
 run.sh                  starts everything (./run.sh --reset rebuilds the database)
+run.bat                 the same on Windows (run.bat --reset asks for the MySQL root password)
 DEMO.md                 step-by-step demo script for the judges
 db/judge_queries.sql    a few extra queries for the judges: window functions, CASE, UNION, more refusals
 ```

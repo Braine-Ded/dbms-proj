@@ -12,22 +12,13 @@ sudo mariadb < db/00_account.sql   # once; with MySQL: mysql -u root -p < db/00_
 
 Later starts are just `./run.sh`, which keeps your data.
 
-## Windows (MySQL 8 + Workbench)
+## Windows (MySQL 8, Python 3.11 to 3.13)
 
-1. In Workbench, connected as `root`, open and run `v1/db/00_account.sql`, then `v1/db/01_schema.sql`.
-2. In PowerShell, from the `v1` folder:
-   ```powershell
-   py -m venv .venv
-   .venv\Scripts\pip install -r requirements.txt
-   .venv\Scripts\python manage.py migrate
-   ```
-3. In Workbench, run `v1/db/02_seed.sql`.
-4. Start the site:
-   ```powershell
-   .venv\Scripts\python manage.py runserver 8000
-   ```
-
-Use Python 3.11, 3.12 or 3.13. More detail is in the root [README](README.md).
+```bat
+cd v1
+run.bat --reset    :: first time: asks for the MySQL root password, then builds, seeds and starts
+run.bat            :: later starts keep your data
+```
 
 ## Sign in
 
@@ -41,4 +32,4 @@ In Workbench, connect as `stride_app` / `stride_app_pass` on `127.0.0.1:3306`, s
 
 ## Reset to the sample data
 
-Linux and macOS: `./run.sh --reset`. Windows: run `01_schema.sql`, then `migrate`, then `02_seed.sql` again.
+`./run.sh --reset` (Linux, macOS) or `run.bat --reset` (Windows).

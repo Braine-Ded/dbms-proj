@@ -37,42 +37,14 @@ Later starts are just `./run.sh`; that keeps your data. `./run.sh --reset` resto
 
 ## Running v1 on Windows
 
-`run.sh` is a bash script, so on Windows you run its steps by hand. The settings come from `v1/.env`, which is already in the repo; Django reads it on startup. If your MySQL port, database user or password differ, change them there.
+Install **MySQL Server 8** (MySQL Installer, note the root password) and **Python 3.12** (tick *Add python.exe to PATH*). Then in the `v1` folder:
 
-**You need:**
-* **MySQL Server 8** and **MySQL Workbench**, from the MySQL Installer: https://dev.mysql.com/downloads/installer/. During setup, note the root password.
-* **Python 3.11, 3.12 or 3.13** from https://www.python.org/downloads/. Tick *Add python.exe to PATH*. `mysqlclient` has ready-made Windows packages for these versions.
-
-**1. Build the database in MySQL Workbench.** Connect as `root`. For each file, use **File → Open SQL Script**, then click the lightning bolt (Execute all):
-
-1. `v1/db/00_account.sql` creates the account the site connects as (`stride_app` / `stride_app_pass`, matching `.env`).
-2. `v1/db/01_schema.sql` creates `fitness_tracker_v1` with its tables, triggers and views.
-
-Run these as root: with MySQL 8's default settings, only root can create triggers.
-
-**2. Install and migrate.** In PowerShell, from the `v1` folder:
-
-```powershell
-py -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python manage.py migrate
+```bat
+run.bat --reset    :: first time: asks for the MySQL root password, builds the database, starts the site
+run.bat            :: every time after that
 ```
 
-`migrate` adds Django's own tables (sessions, admin log) next to the 7 tracker tables. It doesn't change the tracker tables.
-
-**3. Load the sample data.** In Workbench, open and run `v1/db/02_seed.sql`.
-
-**4. Start the site:**
-
-```powershell
-.venv\Scripts\python manage.py runserver 8000
-```
-
-Open http://localhost:8000. Next time, only step 4 is needed.
-
-**To reset to the sample data**, run steps 1.2, the `migrate` command and step 3 again. `01_schema.sql` drops the database first.
-
-If `pip install` fails on `mysqlclient`, your Python version is probably too new for it. Install Python 3.12 and recreate `.venv`.
+Open http://localhost:8000. `run.bat --reset` also puts the sample data back. Settings are in `v1/.env`.
 
 ## More
 
