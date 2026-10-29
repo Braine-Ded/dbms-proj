@@ -4,7 +4,7 @@
   final SQL with the values filled in), plus a rolling history of the last
   300 for the SQL tab.
 * EnvelopeRenderer wraps replies as {"data": ...} or {"error": "..."};
-  staff also get "sql": [statements that ran].
+  admins also get "sql": [statements that ran].
 * exception_handler turns MySQL errors from constraints and triggers into
   readable messages instead of a 500.
 """
@@ -157,6 +157,6 @@ class EnvelopeRenderer(JSONRenderer):
             user = request.user if request is not None else None
         except Exception:  # a bad token on a public endpoint
             user = None
-        if user is not None and user.is_authenticated and user.is_staff:
+        if user is not None and user.is_authenticated and user.is_admin:
             body["sql"] = getattr(request._request, "sql", [])
         return super().render(body, accepted_media_type, renderer_context)

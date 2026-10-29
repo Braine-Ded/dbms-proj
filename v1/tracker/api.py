@@ -4,8 +4,8 @@ Who may do what:
 * anyone: register, login, refresh a token
 * a signed-in user: their own days, food/workout logs, check-ins and profile;
   read the food/exercise catalogue and the leaderboard
-* staff (Users.is_staff = 1): everything above for any user (pass ?user_id=),
-  edit the catalogue and other users, the SQL playground
+* admins (Users.role = 'admin'): everything above for any user (pass ?user_id=),
+  edit the catalogue and other users, the SQL inspector
 
 Simple writes go through the ORM. The reports are hand-written SQL with
 %s parameters (no string joining, so no SQL injection), the same queries
@@ -29,7 +29,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from . import sqlcapture
+from . import inspector, sqlcapture
 from .models import BURN_TYPES, FOOD_TYPES, Burn, DailyBurn, DailyFood, DailyRecord, Food, User, WeeklyRecord
 
 # ---------------------------------------------------------------- helpers
@@ -43,16 +43,16 @@ def rows(sql, params=()):
         return [dict(zip(cols, r)) for r in cur.fetchall()]
 
 
-def require_staff(request):
-    if not request.user.is_staff:
-        raise PermissionDenied("Only staff can do that.")
+def require_admin(request):
+    if not request.user.is_admin:
+        raise PermissionDenied("Only admins can do that.")
 
 
 def target_user(request):
-    """The signed-in user, or for staff the user named by ?user_id= / body user_id."""
+    """The signed-in user, or for admins the user named by ?user_id= / body user_id."""
     uid = request.query_params.get("user_id") or (request.data.get("user_id") if isinstance(request.data, dict) else None)
     if uid and str(uid) != str(request.user.user_id):
-        require_staff(request)
+        require_admin(request)
         return get_object_or_404(User, pk=number(uid, "user_id", int))
     return request.user
 
@@ -61,7 +61,7 @@ def own_day(request, daily_id):
     """A Daily_Record the signed-in user may change."""
     day = get_object_or_404(DailyRecord, pk=number(daily_id, "daily_id", int))
     if day.user_id != request.user.user_id:
-        require_staff(request)
+        require_admin(request)
     return day
 
 
@@ -108,7 +108,9 @@ def profile(user):
         "user_contact": user.user_contact,
         "dob": user.dob,
         "age": user.age,
+        "role": user.role,
         "is_staff": user.is_staff,
+        "is_admin": user.is_admin,
         "is_active": user.is_active,
         "date_joined": user.date_joined,
         "last_login": user.last_login,
@@ -217,7 +219,7 @@ def me(request):
     if not user.check_password(request.data.get("password") or ""):
         raise ValidationError({"password": ["Password is not correct."]})
     if user.is_staff:
-        raise PermissionDenied("Staff accounts are removed from the admin panel.")
+        raise PermissionDenied("Admin and clerk accounts are removed from the admin panel.")
     user.delete()
     return Response({"deleted": True})
 
@@ -243,7 +245,7 @@ def today(request):
 
 @api_view(["GET", "POST"])
 def users(request):
-    require_staff(request)
+    require_admin(request)
     if request.method == "GET":
         return Response([profile(u) for u in User.objects.order_by("user_id")])
     d = request.data
@@ -254,7 +256,7 @@ def users(request):
         username, d.get("password"),
         user_contact=text(d.get("user_contact")),
         dob=iso_date(d.get("dob"), "dob", required=False),
-        is_staff=bool(d.get("is_staff")),
+        role=d.get("role") if d.get("role") in ("athlete", "clerk", "admin") else "athlete",
     )
     return Response(profile(user), status=status.HTTP_201_CREATED)
 
@@ -262,7 +264,7 @@ def users(request):
 @api_view(["PUT", "DELETE"])
 def user_detail(request, user_id):
     if user_id != request.user.user_id:
-        require_staff(request)
+        require_admin(request)
     user = get_object_or_404(User, pk=user_id)
     if request.method == "DELETE":
         user.delete()
@@ -295,7 +297,7 @@ def foods(request):
     if request.method == "GET":
         qs = Food.objects.annotate(times_logged=Count("logged")).order_by("food_type", "name")
         return Response([food_json(f) for f in qs])
-    require_staff(request)
+    require_admin(request)
     d = request.data
     f = Food.objects.create(name=required_text(d.get("name"), "name"), food_type=choice(d.get("food_type"), FOOD_TYPES, "food_type"),
                             calories_per_serving=number(d.get("calories_per_serving"), "calories_per_serving", int))
@@ -304,7 +306,7 @@ def foods(request):
 
 @api_view(["PUT", "DELETE"])
 def food_detail(request, food_id):
-    require_staff(request)
+    require_admin(request)
     f = get_object_or_404(Food, pk=food_id)
     if request.method == "DELETE":
         f.delete()
@@ -322,7 +324,7 @@ def burns(request):
     if request.method == "GET":
         qs = Burn.objects.annotate(times_logged=Count("logged")).order_by("burn_type", "burn_name")
         return Response([burn_json(b) for b in qs])
-    require_staff(request)
+    require_admin(request)
     d = request.data
     b = Burn.objects.create(burn_name=required_text(d.get("burn_name"), "burn_name"), burn_type=choice(d.get("burn_type"), BURN_TYPES, "burn_type"),
                             calories_per_min=number(d.get("calories_per_min"), "calories_per_min"))
@@ -331,7 +333,7 @@ def burns(request):
 
 @api_view(["PUT", "DELETE"])
 def burn_detail(request, burn_id):
-    require_staff(request)
+    require_admin(request)
     b = get_object_or_404(Burn, pk=burn_id)
     if request.method == "DELETE":
         b.delete()
@@ -475,7 +477,8 @@ def stats(request):
     totals = rows("""
 SELECT COUNT(DISTINCT dr.daily_id)       AS days_logged,
        COUNT(db.burn_id)                 AS workouts,
-       COALESCE(SUM(db.duration_min), 0) AS active_minutes
+       COALESCE(SUM(db.duration_min), 0) AS active_minutes,
+       DATEDIFF(CURDATE(), MAX(dr.record_date)) AS days_since_last_log
 FROM Daily_Record dr
 LEFT JOIN Daily_Burn db ON db.daily_id = dr.daily_id
 WHERE dr.user_id = %s""", [user.user_id])[0]
@@ -502,7 +505,7 @@ LIMIT 3""", [user.user_id])
 
 @api_view(["GET"])
 def leaderboard(request):
-    """Calories burnt in the last 7 days by every athlete (staff accounts left out)."""
+    """Calories burnt in the last 7 days by every athlete (clerks and admins left out)."""
     return Response(rows("""
 SELECT u.user_id, u.username,
        COALESCE(SUM(db.duration_min * b.calories_per_min), 0) AS calories_burnt,
@@ -546,32 +549,37 @@ ORDER BY week_start_date""", [user.user_id]))
 def weekly_detail(request, week_id):
     w = get_object_or_404(WeeklyRecord, pk=week_id)
     if w.user_id != request.user.user_id:
-        require_staff(request)
+        require_admin(request)
     w.delete()
     return Response({"deleted": week_id})
 
 
-# ---------------------------------------------------------------- SQL playground (staff)
+# ---------------------------------------------------------------- SQL inspector (admins)
 
 
 @api_view(["GET"])
 def sql_log(request):
-    require_staff(request)
+    require_admin(request)
     return Response(list(sqlcapture.history))
-
-
-READ_STATEMENTS = ("SELECT", "SHOW", "DESCRIBE", "DESC", "EXPLAIN", "WITH")
 
 
 @api_view(["POST"])
 def run_sql(request):
-    """Runs whatever SQL a staff member types into the SQL tab."""
-    require_staff(request)
-    query = (request.data.get("query") or "").strip().rstrip(";").strip()
-    if not query:
-        raise ValidationError({"query": ["Type a query first."]})
-    with connection.cursor() as cur:
-        cur.execute(query)
-        if query.split(None, 1)[0].upper() in READ_STATEMENTS and cur.description:
-            return Response({"columns": [c[0] for c in cur.description], "rows": [list(r) for r in cur.fetchall()]})
-        return Response({"rows_affected": cur.rowcount})
+    """Runs a script from the SQL tab: one statement or many (see inspector.py)."""
+    require_admin(request)
+    script = request.data.get("script") or request.data.get("query") or ""
+    if not inspector.split_script(script):
+        raise ValidationError({"script": ["Type a query first."]})
+    return Response(inspector.run_script(request, script, bool(request.data.get("keep_going"))))
+
+
+@api_view(["GET"])
+def source(request):
+    require_admin(request)
+    return Response(inspector.source())
+
+
+@api_view(["GET"])
+def concepts(request):
+    require_admin(request)
+    return Response(inspector.concepts())

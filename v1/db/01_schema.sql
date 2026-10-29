@@ -6,7 +6,7 @@
 --  `python manage.py migrate` and finally 02_seed.sql.
 --
 --  Same 7 tables and relations as v0. The only change: Users is now also
---  the login table, so it gained password / is_staff / is_active /
+--  the login table, so it gained password / role / is_staff / is_active /
 --  date_joined / last_login. Django's own tables (sessions, admin log,
 --  permissions) are added next to these by `manage.py migrate`.
 -- =====================================================================
@@ -25,7 +25,10 @@ CREATE TABLE Users (
     dob           DATE,
     password      VARCHAR(128)  NOT NULL,                 -- PBKDF2 hash, used for signing in
     unhashed_password VARCHAR(128) NULL,                  -- the same password in plaintext (mock project; never sent to the site)
-    is_staff      TINYINT(1)    NOT NULL DEFAULT 0,       -- may use the admin panel
+    role          ENUM('athlete','clerk','admin') NOT NULL DEFAULT 'athlete',
+                                                          -- clerk: admin panel, view and add only
+                                                          -- admin: admin panel and website staff tools, edit and delete too
+    is_staff      TINYINT(1)    AS (role IN ('clerk','admin')) STORED,  -- may open the admin panel (derived from role)
     is_active     TINYINT(1)    NOT NULL DEFAULT 1,       -- 0 = account disabled, can't sign in
     date_joined   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_login    DATETIME      NULL,
@@ -222,7 +225,7 @@ GROUP BY user_id, username, DATE_SUB(record_date, INTERVAL WEEKDAY(record_date) 
 CREATE VIEW vw_user_profile AS
 SELECT  user_id, username, user_contact, dob,
         TIMESTAMPDIFF(YEAR, dob, CURDATE()) AS age,
-        is_staff, is_active, date_joined, last_login
+        role, is_staff, is_active, date_joined, last_login
 FROM Users;
 
 -- Every food logged, one row per (day, food), with who / when / calories.

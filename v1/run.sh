@@ -48,6 +48,6 @@ fi
 
 echo
 echo "  Stride v1:    http://localhost:$PORT"
-echo "  Admin panel:  http://localhost:$PORT/admin/   ($SEED_ADMIN_USER / $SEED_ADMIN_PASSWORD)"
+echo "  Admin panel:  http://localhost:$PORT/admin/   ($SEED_ADMIN_USER / $SEED_ADMIN_PASSWORD, or $SEED_CLERK_USER / $SEED_CLERK_PASSWORD: view and add only)"
 echo
 exec $PY manage.py runserver "0.0.0.0:$PORT"

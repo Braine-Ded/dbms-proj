@@ -29,7 +29,8 @@ Then open http://localhost:8000.
 
 | Account | Password | Role |
 |---|---|---|
-| `admin` | `admin12345` | staff: admin panel, SQL tools, catalogue editing |
+| `admin` | `admin12345` | admin: admin panel (edit and delete), SQL tab, catalogue editing |
+| `clerk` | `clerk12345` | clerk: admin panel, view and add only |
 | `haadi_runs`, `lakshya_lifts`, `nishad_cycles` | `stride12345` | athletes with 4 weeks of sample logs |
 
 Later starts are just `./run.sh`; that keeps your data. `./run.sh --reset` restores the sample data.

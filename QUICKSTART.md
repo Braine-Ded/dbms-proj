@@ -33,7 +33,8 @@ Use Python 3.11, 3.12 or 3.13. More detail is in the root [README](README.md).
 
 | Account | Password | |
 |---|---|---|
-| `admin` | `admin12345` | staff; admin panel at http://localhost:8000/admin/ |
+| `admin` | `admin12345` | admin; admin panel at http://localhost:8000/admin/ |
+| `clerk` | `clerk12345` | clerk; admin panel, view and add only |
 | `haadi_runs`, `lakshya_lifts`, `nishad_cycles` | `stride12345` | athletes with sample logs |
 
 In Workbench, connect as `stride_app` / `stride_app_pass` on `127.0.0.1:3306`, schema `fitness_tracker_v1`.

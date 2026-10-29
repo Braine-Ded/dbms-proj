@@ -7,13 +7,14 @@ USE fitness_tracker_v1;
 
 -- Users -----------------------------------------------------------------
 -- password holds a PBKDF2-SHA256 hash (Django's format), never the password.
--- The three athletes sign in with  stride12345, the staff account admin
--- with  admin12345  (both also written in .env).
-INSERT INTO Users (user_id, username, user_contact, dob, password, unhashed_password, is_staff, date_joined) VALUES
- (1, 'haadi_runs',    'haadi@example.com',   '2005-03-14', 'pbkdf2_sha256$1000000$VmOkAF2RWOXHs1nyLb6YIX$O+wXUo77yvW0Y74DmVysmOiDyMdv5l4yrnwXRe+FdTM=', 'stride12345', 0, NOW() - INTERVAL 60 DAY),
- (2, 'lakshya_lifts', 'lakshya@example.com', '2004-11-02', 'pbkdf2_sha256$1000000$jBgvkGllj6A11HpNB011sL$vxDm3FfDDFluV3zdJnP369cOJCbXgr7IUCX5NNSyR6c=', 'stride12345', 0, NOW() - INTERVAL 58 DAY),
- (3, 'nishad_cycles', '+91 98200 12345',     '2005-07-21', 'pbkdf2_sha256$1000000$LmfAmNpuRgBXHjZr99ELfe$8uCQdW4RSU1W3odjcVG6yuPNZFQlNl8xjrL/X0ajOHs=', 'stride12345', 0, NOW() - INTERVAL 55 DAY),
- (4, 'admin',         'admin@stride.local',  NULL,         'pbkdf2_sha256$1000000$qwySvIE3RJ33RvQGZAG4lI$RBmoyob2YWtwa9hyok6T8aeqDhz85sys9M8x8B1HVRI=', 'admin12345',  1, NOW() - INTERVAL 61 DAY);
+-- The three athletes sign in with  stride12345, admin with  admin12345  and
+-- clerk with  clerk12345  (all also written in .env). is_staff follows from role.
+INSERT INTO Users (user_id, username, user_contact, dob, password, unhashed_password, role, date_joined) VALUES
+ (1, 'haadi_runs',    'haadi@example.com',   '2005-03-14', 'pbkdf2_sha256$1000000$VmOkAF2RWOXHs1nyLb6YIX$O+wXUo77yvW0Y74DmVysmOiDyMdv5l4yrnwXRe+FdTM=', 'stride12345', 'athlete', NOW() - INTERVAL 60 DAY),
+ (2, 'lakshya_lifts', 'lakshya@example.com', '2004-11-02', 'pbkdf2_sha256$1000000$jBgvkGllj6A11HpNB011sL$vxDm3FfDDFluV3zdJnP369cOJCbXgr7IUCX5NNSyR6c=', 'stride12345', 'athlete', NOW() - INTERVAL 58 DAY),
+ (3, 'nishad_cycles', '+91 98200 12345',     '2005-07-21', 'pbkdf2_sha256$1000000$LmfAmNpuRgBXHjZr99ELfe$8uCQdW4RSU1W3odjcVG6yuPNZFQlNl8xjrL/X0ajOHs=', 'stride12345', 'athlete', NOW() - INTERVAL 55 DAY),
+ (4, 'admin',         'admin@stride.local',  NULL,         'pbkdf2_sha256$1000000$qwySvIE3RJ33RvQGZAG4lI$RBmoyob2YWtwa9hyok6T8aeqDhz85sys9M8x8B1HVRI=', 'admin12345',  'admin',   NOW() - INTERVAL 61 DAY),
+ (5, 'clerk',         'clerk@stride.local',  NULL,         'pbkdf2_sha256$1000000$NVyfxP4Jm0LhSlIHEHAfho$Xn2HPhZHkYuyl/IrSc2r16FX/VcDRmjBK/w+29Tk600=', 'clerk12345',  'clerk',   NOW() - INTERVAL 30 DAY);
 
 -- Food catalogue ------------------------------------------------------
 INSERT INTO Food (food_id, name, food_type, calories_per_serving) VALUES

@@ -37,17 +37,26 @@ class UserManager(BaseUserManager):
         return user
 
     def create_superuser(self, username, password=None, **fields):
-        return self.create_user(username, password, is_staff=True, **fields)
+        return self.create_user(username, password, role="admin", **fields)
+
+
+ROLES = [("athlete", "Athlete"), ("clerk", "Clerk"), ("admin", "Admin")]
 
 
 class User(AbstractBaseUser):
-    """Users: an athlete and their login. is_staff may open the admin panel."""
+    """Users: a person and their login. role decides what they may do:
+    athlete (own logs), clerk (admin panel: view and add), admin (everything)."""
 
     user_id = models.AutoField(primary_key=True)
     username = models.CharField(max_length=50, unique=True)
     user_contact = models.CharField("contact", max_length=100, blank=True, null=True)
     dob = models.DateField("date of birth", blank=True, null=True, validators=[not_in_future])
-    is_staff = models.BooleanField("staff", default=False)
+    role = models.CharField(max_length=10, choices=ROLES, default="athlete")
+    # computed by MySQL from role (a STORED generated column): Django only reads it
+    is_staff = models.GeneratedField(
+        expression=models.Case(models.When(role__in=["clerk", "admin"], then=models.Value(True)),
+                               default=models.Value(False)),
+        output_field=models.BooleanField("staff"), db_persist=True)
     is_active = models.BooleanField("active", default=True)
     date_joined = models.DateTimeField(default=datetime.now)
     # password and last_login come from AbstractBaseUser
@@ -77,16 +86,23 @@ class User(AbstractBaseUser):
         today = date.today()
         return today.year - self.dob.year - ((today.month, today.day) < (self.dob.month, self.dob.day))
 
-    # staff are the admins: no per-model permission tables needed
+    # the role is the permission: no per-model permission tables needed
+    @property
+    def is_admin(self):
+        return self.role == "admin"
+
     @property
     def is_superuser(self):
-        return self.is_staff
+        return self.is_admin
 
     def has_perm(self, perm, obj=None):
-        return self.is_active and self.is_staff
+        """Admins may do anything; clerks only view and add ("tracker.view_food", "tracker.add_food")."""
+        if not (self.is_active and self.is_staff):
+            return False
+        return self.is_admin or perm.split(".")[-1].startswith(("view_", "add_"))
 
     def has_perms(self, perms, obj=None):
-        return self.is_active and self.is_staff
+        return all(self.has_perm(p, obj) for p in perms)
 
     def has_module_perms(self, app_label):
         return self.is_active and self.is_staff

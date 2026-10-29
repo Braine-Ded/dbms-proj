@@ -30,7 +30,7 @@ About 10 minutes. It follows the four judging criteria: **sign-in is authenticat
 * Show `SHOW TRIGGERS;` and the views `vw_daily_summary`, `vw_weekly_average` and `vw_food_log`.
 * Point out that `Users` is also the login table, and `Users.password` stores a hash:
   ```sql
-  SELECT user_id, username, password, is_staff, last_login FROM Users;
+  SELECT user_id, username, password, role, is_staff, last_login FROM Users;
   ```
 
 ## 2. Users register and sign in (2 min, Browser A + Workbench)
@@ -81,7 +81,7 @@ Signed in as `haadi_runs`, on **Today**:
    > "That error comes from MySQL itself; the site shows the constraint's name."
 5. Go to **Account**, edit the contact field and click **Save profile**, then run `SELECT * FROM Users WHERE user_id = 1;`.
 
-**With staff, the SQL is visible live:** sign in as `admin` in Browser A instead.
+**As an admin, the SQL is visible live:** sign in as `admin` in Browser A instead.
 
 * Open the **Live SQL** drawer (bottom right) and click around. Each click lists the exact `SELECT`, `INSERT`, `UPDATE` or `DELETE` statements it ran.
 * In **Food & exercise**, pick **Poha** and click **Delete**. It is refused with *Can't delete: N logged entries still use it (the foreign key is ON DELETE RESTRICT).* The **Add a food** button there writes a new row to `Food`, which then appears in the Today picker.
@@ -128,9 +128,9 @@ DELETE FROM Users WHERE username = 'judge_demo';  -- cascades to their days, mea
 |---|---|
 | Why JWT? | It is stateless: the server keeps nothing per login and only checks the signature. The access token lasts 15 minutes and the refresh token 7 days. |
 | How does sign-out work? | The browser deletes its tokens. To stop a user from the server side, set `is_active = 0`; it takes effect on their next request. A token blacklist table would add a foreign key that blocks `DELETE FROM Users`, so it was left out on purpose. |
-| Is it open to SQL injection? | No. The ORM and `%s` parameters do the quoting. The staff-only SQL tab runs raw SQL on purpose. |
+| Is it open to SQL injection? | No. The ORM and `%s` parameters do the quoting. The admin-only SQL tab runs raw SQL on purpose. |
 | What happens if a request fails half-way? | Each API request is one transaction (`ATOMIC_REQUESTS`), so everything it did is rolled back. |
-| Who can see what? | Athletes see only their own data. Staff can see everyone's and edit the catalogue. Every rule is checked on the server, and the API answers 403 to anything not allowed. |
+| Who can see what? | Athletes see only their own data. Admins can see everyone's and edit the catalogue; clerks can view and add in the admin panel but not change or delete. Every rule is checked on the server, and the API answers 403 to anything not allowed. |
 
 ## Reset after the demo
 

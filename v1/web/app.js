@@ -2,7 +2,7 @@
 // Signing in returns two JWTs: a short-lived access token sent as
 // "Authorization: Bearer ..." on every call, and a refresh token used to get
 // a new access token when the old one expires. Both are kept in localStorage.
-// Staff also get the SQL behind each call, shown in the Live SQL drawer.
+// Admins also get the SQL behind each call, shown in the Live SQL drawer.
 
 const FOOD_TYPES = ['Breakfast', 'Grain', 'Protein', 'Dairy', 'Fruit', 'Vegetable', 'Snack', 'Beverage', 'Dessert', 'Fast Food'];
 const BURN_TYPES = ['Cardio', 'Strength', 'Flexibility', 'Sports', 'Outdoor'];
@@ -22,7 +22,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const kcal = (n) => Math.round(Number(n) || 0).toLocaleString('en-IN');
 const initials = (name) => String(name || '?').replace(/[^a-zA-Z0-9]/g, ' ').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('') || '?';
-const isStaff = () => !!state.me?.is_staff;
+const isAdmin = () => !!state.me?.is_admin;
 
 // ------------------------------------------------------------------ tokens
 function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* private mode */ } }
@@ -82,33 +82,61 @@ async function api(method, path, body, retry = true) {
 // API errors are already shown as a toast
 window.addEventListener('unhandledrejection', (e) => e.preventDefault());
 
-// ------------------------------------------------------------------ SQL drawer (staff)
-const drawer = { calls: [], count: 0 };
+// ------------------------------------------------------------------ SQL drawer (admins)
+const drawer = { calls: [] };
+
+const SQL_WORDS = new Set(('SELECT FROM WHERE AND OR NOT JOIN INNER LEFT RIGHT FULL OUTER CROSS ON USING GROUP BY ORDER LIMIT ' +
+  'INSERT INTO VALUES UPDATE SET DELETE AS SUM COUNT AVG MIN MAX ROUND COALESCE DISTINCT DESC ASC INTERVAL DAY MONTH ' +
+  'CURDATE NOW DUPLICATE KEY OVER PARTITION RANK LAG POW TIMESTAMPDIFF DATEDIFF DATE_ADD DATE_SUB DAYNAME DATE_FORMAT ' +
+  'YEAR WEEKDAY NULL IN IS LIKE BETWEEN EXISTS ANY ALL CASE WHEN THEN ELSE END HAVING WITH UNION SHOW TABLES DESCRIBE ' +
+  'EXPLAIN CREATE ALTER DROP TRUNCATE RENAME TABLE VIEW TRIGGER BEFORE AFTER EACH ROW BEGIN IF SIGNAL SQLSTATE ' +
+  'MESSAGE_TEXT REPLACE ADD COLUMN MODIFY CONSTRAINT PRIMARY FOREIGN REFERENCES CASCADE RESTRICT CHECK UNIQUE DEFAULT ' +
+  'START TRANSACTION COMMIT ROLLBACK SAVEPOINT RELEASE TO GRANT REVOKE PRIVILEGES DELIMITER DIV MOD').split(' '));
 
 function highlight(sql) {
-  return esc(sql)
-    .replace(/(&#39;.*?&#39;)/g, '<span class="s">$1</span>')
-    .replace(/\b(SELECT|FROM|WHERE|AND|OR|JOIN|INNER|LEFT|ON|GROUP BY|ORDER BY|LIMIT|INSERT INTO|VALUES|UPDATE|SET|DELETE|AS|SUM|COUNT|AVG|ROUND|COALESCE|DISTINCT|DESC|ASC|INTERVAL|DAY|CURDATE|DUPLICATE KEY|OVER|RANK|LAG|POW|TIMESTAMPDIFF|YEAR|DATE_SUB|WEEKDAY|NULL|IN|NOT|IS|CASE|WHEN|THEN|ELSE|END|HAVING|WITH|SHOW|TABLES|DESCRIBE|CREATE|VIEW|DROP|TABLE)\b/g, '<span class="k">$1</span>')
-    .replace(/(^|[\s(,=])(-?\d+(?:\.\d+)?)(?=[\s),;]|$)/g, '$1<span class="n">$2</span>');
+  return String(sql).replace(/(--[^\n]*|#[^\n]*|\/\*[\s\S]*?\*\/)|('(?:[^'\\]|\\.)*'?)|\b(\d+(?:\.\d+)?)\b|\b([A-Za-z_]+)\b|([\s\S])/g,
+    (m, comment, str, num, word) => {
+      if (comment) return `<span class="c">${esc(comment)}</span>`;
+      if (str) return `<span class="s">${esc(str)}</span>`;
+      if (num) return `<span class="n">${num}</span>`;
+      if (word && SQL_WORDS.has(word.toUpperCase())) return `<span class="k">${word}</span>`;
+      return esc(m);
+    });
 }
 
+// Django's one-line SQL, laid out to read: no backticks, no "Table." in front of
+// every column when there is only one table, a new line before each clause
+function prettySQL(sql) {
+  if (sql.includes('\n')) return sql;  // written by hand, already laid out
+  let s = sql.replace(/`/g, '');
+  const table = !/\bJOIN\b/i.test(s) && (s.match(/\b(?:FROM|UPDATE|INTO)\s+(\w+)/i) || [])[1];
+  if (table) s = s.replace(new RegExp('\\b' + table + '\\.', 'g'), '');
+  return s.replace(/(?<!=)\s+(FROM|WHERE|INNER JOIN|LEFT OUTER JOIN|LEFT JOIN|GROUP BY|ORDER BY|HAVING|LIMIT|VALUES|SET|ON DUPLICATE KEY UPDATE)\b/g, '\n$1');
+}
+
+// every API call first loads the signed-in user from the token; that lookup is the same each time
+const isTokenLookup = (sql) => /^SELECT .* FROM `Users` WHERE `Users`.`user_id` = \d+ LIMIT 21$/.test(sql);
+
 function showSQL(call, statements, error) {
-  if (!statements.length) return;
-  drawer.calls.unshift({ call, statements, error });
-  drawer.calls = drawer.calls.slice(0, 12);
-  drawer.count += statements.length;
+  const shown = statements.filter((s) => !isTokenLookup(s));
+  if (!shown.length && !error) return;
+  drawer.calls.unshift({ call, statements: shown, error });
+  drawer.calls = drawer.calls.slice(0, 8);
   const badge = $('#drawer-count');
-  badge.textContent = drawer.count;
+  badge.textContent = Number(badge.textContent) + 1;
   badge.classList.remove('bump'); void badge.offsetWidth; badge.classList.add('bump');
   renderDrawer();
 }
 
 function renderDrawer() {
   const body = $('#drawer-body');
-  if (!drawer.calls.length) { body.innerHTML = '<p class="empty">Use the app and the SQL behind each action shows up here.</p>'; return; }
+  if (!drawer.calls.length) { body.innerHTML = '<p class="empty">Use the site and the SQL behind each click shows up here, newest first.</p>'; return; }
   body.innerHTML = drawer.calls.map((c) => `
-    <p class="call ${c.error ? 'bad' : ''}">${esc(c.call)}${c.error ? ' — ' + esc(c.error) : ''}</p>
-    ${c.statements.map((s) => `<pre class="sql">${highlight(s)};</pre>`).join('')}`).join('');
+    <section class="call ${c.error ? 'bad' : ''}">
+      <h4>${esc(c.call)}<span>${c.statements.length} quer${c.statements.length === 1 ? 'y' : 'ies'}</span></h4>
+      ${c.error ? `<p class="call-err">${esc(c.error)}</p>` : ''}
+      ${c.statements.map((s) => `<pre class="sql">${highlight(prettySQL(s))}</pre>`).join('')}
+    </section>`).join('');
 }
 
 $('#drawer-toggle').addEventListener('click', () => {
@@ -116,6 +144,7 @@ $('#drawer-toggle').addEventListener('click', () => {
   const open = d.dataset.open !== 'true';
   d.dataset.open = open;
   $('#drawer-toggle').setAttribute('aria-expanded', open);
+  if (!drawer.calls.length) renderDrawer();
 });
 
 let toastTimer;
@@ -163,14 +192,14 @@ function route() {
   $('#private').hidden = false;
 
   let view = VIEWS.includes(hash) ? hash : 'today';
-  if (view === 'sql' && !isStaff()) view = 'today';
+  if (view === 'sql' && !isAdmin()) view = 'today';
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
   document.querySelectorAll('.tabs a').forEach((a) => a.classList.toggle('active', a.dataset.view === view));
   if (view === 'today') loadToday();
   if (view === 'progress') loadProgress();
   if (view === 'catalogue') loadCatalogue();
   if (view === 'account') loadAccount();
-  if (view === 'sql') loadHistory();
+  if (view === 'sql') loadInspector();
 }
 window.addEventListener('hashchange', route);
 
@@ -237,7 +266,7 @@ function signedOut(message) {
     logDate: null, logDay: null,
   });
   $('#cat-search').value = '';
-  document.body.classList.remove('is-staff');
+  document.body.classList.remove('is-staff', 'is-admin');
   Object.values(charts).forEach((c) => c.destroy());
   history.replaceState(null, '', message ? '#login' : location.pathname);
   route();
@@ -254,6 +283,7 @@ $('#logout').addEventListener('click', async () => {
 function setMe(me) {
   state.me = me;
   document.body.classList.toggle('is-staff', me.is_staff);
+  document.body.classList.toggle('is-admin', me.is_admin);
   $('#me-avatar').textContent = initials(me.username);
   $('#me-name').textContent = me.username;
 }
@@ -491,6 +521,8 @@ async function loadStats() {
   $('#st-days').textContent = s.totals.days_logged;
   $('#st-workouts').textContent = s.totals.workouts;
   $('#st-minutes').textContent = kcal(s.totals.active_minutes);
+  const since = s.totals.days_since_last_log;
+  $('#st-last').textContent = since == null ? 'Nothing logged yet' : since === 0 ? 'Last logged today' : `Last logged ${since} day${since === 1 ? '' : 's'} ago`;
   const list = (items, label, value, unit) => items.length
     ? items.map((i) => `<li>${esc(i[label])}<span>${Number(i[value])} ${unit}</span></li>`).join('')
     : '<li>Nothing yet</li>';
@@ -570,14 +602,16 @@ async function loadProgress() {
   document.querySelectorAll('#range-seg button').forEach((b) => b.classList.toggle('on', Number(b.dataset.days) === state.days));
   const rows = await api('GET', 'summary?days=' + state.days);
   const opts = baseChartOptions();
-  opts.plugins.legend = { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8, font: { family: 'Archivo', weight: '600' }, color: C.ink } };
+  // legend keeps the dataset order (Eaten, Burnt, Net), not the drawing order
+  opts.plugins.legend = { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8, font: { family: 'Archivo', weight: '600' }, color: C.ink, sort: (a, b) => a.datasetIndex - b.datasetIndex } };
   drawChart('chart-balance', {
     data: {
       labels: rows.map((r) => prettyDate(r.record_date, { day: 'numeric', month: 'short' })),
       datasets: [
-        { type: 'bar', label: 'Eaten', data: rows.map((r) => r.calories_in), backgroundColor: C.food, borderRadius: 3, maxBarThickness: 22 },
-        { type: 'bar', label: 'Burnt', data: rows.map((r) => r.calories_out), backgroundColor: C.move, borderRadius: 3, maxBarThickness: 22 },
-        { type: 'line', label: 'Net', data: rows.map((r) => r.net_calories), borderColor: C.ink, backgroundColor: C.ink, borderWidth: 2, tension: .3, pointRadius: 2 },
+        { type: 'bar', label: 'Eaten', data: rows.map((r) => r.calories_in), backgroundColor: C.food, borderRadius: 3, maxBarThickness: 22, order: 2 },
+        { type: 'bar', label: 'Burnt', data: rows.map((r) => r.calories_out), backgroundColor: C.move, borderRadius: 3, maxBarThickness: 22, order: 2 },
+        // order 1 draws the net line in front of the bars
+        { type: 'line', label: 'Net', data: rows.map((r) => r.net_calories), borderColor: C.ink, backgroundColor: C.ink, borderWidth: 2, tension: .3, pointRadius: 2, order: 1 },
       ],
     },
     options: opts,
@@ -645,7 +679,7 @@ document.addEventListener('click', async (e) => {
 // ------------------------------------------------------------------ CATALOGUE
 // A calorie guide rather than a second place to log (Today does that): pick a
 // food to see how long each exercise takes to burn it off, or an exercise to
-// see what a workout pays for. Staff add, edit and delete items here.
+// see what a workout pays for. Admins add, edit and delete items here.
 $('#add-food-form [name=food_type]').innerHTML = FOOD_TYPES.map((t) => `<option>${t}</option>`).join('');
 $('#add-burn-form [name=burn_type]').innerHTML = BURN_TYPES.map((t) => `<option>${t}</option>`).join('');
 
@@ -738,7 +772,7 @@ function renderDetail() {
     <h3 class="effects-title">${food ? 'Fastest ways to burn it off' : 'Burns about as much as'}</h3>
     ${food ? `<p class="muted small">Click Log to add one of these workouts to ${logDayName()}.</p>` : ''}
     <ol class="effects ${food ? 'with-log' : ''}" id="cat-effects"></ol>
-    <div class="detail-actions staff-only">
+    <div class="detail-actions admin-only">
       <button class="btn btn-ghost btn-sm" data-edit-${mode}="${item[c.id]}">Edit</button>
       <button class="btn btn-ghost btn-sm del" data-delete-${mode}="${item[c.id]}">Delete</button>
     </div>`;
@@ -894,7 +928,7 @@ async function loadAccount() {
   $('#acc-title').textContent = me.username;
   $('#acc-avatar').textContent = initials(me.username);
   $('#acc-sub').textContent = [
-    me.is_staff ? 'Staff account' : 'Member',
+    { admin: 'Admin account', clerk: 'Clerk account' }[me.role] || 'Member',
     'joined ' + prettyDate(me.date_joined, { day: 'numeric', month: 'long', year: 'numeric' }),
     me.last_login ? 'last sign-in ' + prettyDate(me.last_login, { day: 'numeric', month: 'short' }) + ' at ' + String(me.last_login).slice(11, 16) : null,
   ].filter(Boolean).join(', ');
@@ -903,6 +937,20 @@ async function loadAccount() {
   form.user_contact.value = me.user_contact || '';
   form.dob.value = me.dob || '';
   form.dob.max = state.today;
+  loadStartingBody();
+}
+
+// the first weekly check-in, shown read only (new check-ins are added on Progress)
+async function loadStartingBody() {
+  const weeks = await api('GET', 'weekly');
+  const first = weeks[0];
+  $('#body-start').hidden = !first;
+  if (!first) { $('#body-empty').hidden = false; return; }
+  $('#body-empty').hidden = true;
+  $('#body-height').textContent = Number(first.height_cm) + ' cm';
+  $('#body-weight').textContent = Number(first.weight_kg) + ' kg';
+  $('#body-bmi').textContent = first.bmi;
+  $('#body-date').textContent = 'From your first check-in, week of ' + prettyDate(first.week_start_date, { day: 'numeric', month: 'long', year: 'numeric' }) + '.';
 }
 
 $('#profile-form').addEventListener('submit', async (e) => {
@@ -939,53 +987,139 @@ $('#delete-form').addEventListener('submit', async (e) => {
   toast('Your account and all your logs were deleted', 'good');
 });
 
-// ------------------------------------------------------------------ SQL playground (staff)
-const PRESETS = {
-  'Daily summary view': 'SELECT * FROM vw_daily_summary ORDER BY record_date DESC LIMIT 15;',
-  'Weekly averages': 'SELECT * FROM vw_weekly_average ORDER BY week_start DESC, username;',
-  'Accounts': 'SELECT user_id, username, is_staff, is_active, date_joined, last_login, LEFT(password, 30) AS password_hash FROM Users;',
-  'Food log view': 'SELECT * FROM vw_food_log ORDER BY record_date DESC LIMIT 20;',
-  'Tables': 'SHOW FULL TABLES;',
-  'Describe Users': 'DESCRIBE Users;',
-  'Top foods overall': `SELECT f.name, f.food_type, SUM(df.servings) AS servings_eaten,
-       SUM(df.servings * f.calories_per_serving) AS total_kcal
-FROM Daily_Food df JOIN Food f ON f.food_id = df.food_id
-GROUP BY f.food_id, f.name, f.food_type
-ORDER BY total_kcal DESC LIMIT 10;`,
-  'Try a future date': 'INSERT INTO Daily_Record (user_id, record_date) VALUES (1, CURDATE() + INTERVAL 1 DAY);',
-  'Try negative servings': 'INSERT INTO Daily_Food (daily_id, food_id, servings) VALUES (1, 3, -2);',
-  'Try deleting Poha': "DELETE FROM Food WHERE name = 'Poha';",
-};
-$('#presets').innerHTML = Object.keys(PRESETS).map((k) => `<button data-preset="${esc(k)}">${esc(k)}</button>`).join('');
-$('#presets').addEventListener('click', (e) => {
-  const k = e.target.dataset.preset;
-  if (k) { $('#sql-input').value = PRESETS[k]; runPlayground(); }
+// ------------------------------------------------------------------ SQL page (admins)
+// Three tabs: "How it's built" shows the project's own SQL (GET /api/source),
+// "Run SQL" runs scripts on their own MySQL connection as stride_app
+// (POST /api/sql, examples from db/concepts.sql via GET /api/concepts), and
+// "History" lists every statement the API ran. Data itself is edited in the admin panel.
+const insp = { tab: 'source', source: null, picked: 0, lessons: null };
+
+function dataTable(columns, rows) {
+  return `<div class="table-wrap"><table><thead><tr>${columns.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((row) => `<tr>${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === null ? '<span class="muted">NULL</span>' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function loadInspector() {
+  showTab(insp.tab);
+}
+
+function showTab(tab) {
+  insp.tab = tab;
+  document.querySelectorAll('#sql-tabs button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.tab === tab);
+    b.setAttribute('aria-selected', b.dataset.tab === tab);
+  });
+  document.querySelectorAll('.sql-pane').forEach((p) => (p.hidden = p.id !== 'pane-' + tab));
+  if (tab === 'source' && !insp.source) loadSource();
+  if (tab === 'run' && !insp.lessons) loadLessons();
+  if (tab === 'history') loadHistory();
+}
+$('#sql-tabs').addEventListener('click', (e) => { if (e.target.dataset.tab) showTab(e.target.dataset.tab); });
+
+// ---- How it's built
+async function loadSource() {
+  insp.source = await api('GET', 'source').catch(() => null);
+  if (!insp.source) return;
+  const groups = [...new Set(insp.source.map((i) => i.group))];
+  $('#src-list').innerHTML = groups.map((g) => `<h4>${esc(g)}</h4>
+    <ul>${insp.source.map((i, n) => i.group === g ? `<li><button data-n="${n}">${esc(i.name)}</button></li>` : '').join('')}</ul>`).join('');
+  showSource(insp.picked);
+}
+
+function showSource(n) {
+  const item = insp.source[n];
+  if (!item) return;
+  insp.picked = n;
+  document.querySelectorAll('#src-list button').forEach((b) => b.classList.toggle('on', Number(b.dataset.n) === n));
+  $('#src-view').innerHTML = `
+    <div class="src-head">
+      <div><h3>${esc(item.name)}</h3><span class="muted small">${esc(item.group)} · <code>${esc(item.file)}</code> line ${item.line}</span></div>
+      <div class="acts">
+        ${item.try ? `<button class="btn btn-ghost btn-sm" data-try="${n}">Run it</button>` : ''}
+        ${item.admin ? `<a class="btn btn-ghost btn-sm" href="${esc(item.admin)}" target="_blank" rel="noopener">Open in admin panel</a>` : ''}
+      </div>
+    </div>
+    <pre class="sql code">${highlight(item.code)}</pre>`;
+}
+
+$('#src-list').addEventListener('click', (e) => { if (e.target.dataset.n) showSource(Number(e.target.dataset.n)); });
+$('#src-view').addEventListener('click', (e) => {
+  const item = insp.source?.[e.target.dataset.try];
+  if (!item) return;
+  showTab('run');
+  $('#sql-input').value = item.try;
+  runScript(item.try);
 });
 
-async function runPlayground() {
+// ---- Run SQL
+async function loadLessons() {
+  insp.lessons = await api('GET', 'concepts').catch(() => null);
+  if (!insp.lessons) return;
+  const groups = [...new Set(insp.lessons.map((l) => l.group))];
+  $('#lesson').innerHTML = '<option value="">Pick an example…</option>' + groups.map((g) => `<optgroup label="${esc(g)}">${
+    insp.lessons.map((l, i) => l.group === g ? `<option value="${i}">${esc(l.title)}</option>` : '').join('')}</optgroup>`).join('');
+}
+
+$('#lesson').addEventListener('change', (e) => {
+  const l = insp.lessons?.[e.target.value];
+  if (!l) return;
+  $('#sql-input').value = l.sql;
+  $('#keep-going').checked = l.keep_going;
+  $('#lesson-notes').textContent = l.notes || '';
+  $('#sql-result').innerHTML = '';
+});
+
+function selectedOrAll() {
+  const ta = $('#sql-input');
+  const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+  return sel.trim() ? sel : ta.value;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+function renderResult(r) {
+  const summary = r.error ? 'failed'
+    : r.columns ? plural(r.rows.length, 'row') + (r.truncated ? ' (first 500)' : '')
+    : r.rows_affected > 0 ? plural(r.rows_affected, 'row') + ' changed' : 'done';
+  const tx = r.tx?.open ? `<span class="tx">in transaction${r.tx.savepoints.length ? ', savepoints ' + r.tx.savepoints.map(esc).join(', ') : ''}</span>` : '';
+  return `<div class="stmt ${r.error ? 'bad' : ''}">
+    <div class="stmt-head"><span class="kind kind-${r.kind}" title="${KIND_NAMES[r.kind] || ''}">${r.kind}</span>
+      <b>${summary}</b>${tx}<span class="ms">${r.ms} ms</span></div>
+    <pre class="sql">${highlight(r.sql)}</pre>
+    ${r.error ? `<p class="stmt-err">${esc(r.error)}</p>` : ''}
+    ${r.columns ? dataTable(r.columns, r.rows) : ''}
+    ${(r.warnings || []).map((w) => `<p class="warn">${esc(w)}</p>`).join('')}</div>`;
+}
+const KIND_NAMES = { DDL: 'Data definition', DML: 'Data manipulation', DQL: 'Query', TCL: 'Transaction control', DCL: 'Access control' };
+
+async function runScript(script) {
   const out = $('#sql-result');
+  out.innerHTML = '<p class="muted">Running…</p>';
   try {
-    const r = await api('POST', 'sql', { query: $('#sql-input').value });
-    if (r.columns) {
-      out.innerHTML = `<p class="sql-ok">${r.rows.length} row${r.rows.length === 1 ? '' : 's'}</p>
-        <div class="table-wrap"><table><thead><tr>${r.columns.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead>
-        <tbody>${r.rows.map((row) => `<tr>${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : ''}">${v === null ? '<span class="muted">NULL</span>' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
-    } else {
-      out.innerHTML = `<p class="sql-ok">Done. ${r.rows_affected} row${r.rows_affected === 1 ? '' : 's'} affected.</p>`;
-      state.foods = [];
-    }
+    const r = await api('POST', 'sql', { script, keep_going: $('#keep-going').checked });
+    out.innerHTML = r.results.map(renderResult).join('')
+      + (r.notes.length ? `<div class="run-notes">${r.notes.map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : '');
+    state.foods = [];
   } catch (err) {
     out.innerHTML = `<p class="sql-err">${esc(err.message)}</p>`;
   }
-  loadHistory();
 }
-$('#sql-run').addEventListener('click', runPlayground);
-$('#sql-input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) runPlayground(); });
 
+$('#sql-run').addEventListener('click', () => runScript(selectedOrAll()));
+$('#sql-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runScript(selectedOrAll()); }
+  if (e.key === 'Tab' && !e.shiftKey) {  // indent instead of leaving the box
+    e.preventDefault();
+    e.target.setRangeText('    ', e.target.selectionStart, e.target.selectionEnd, 'end');
+  }
+});
+
+// ---- History
 async function loadHistory() {
   const rows = await api('GET', 'sqllog').catch(() => []);
-  $('#sql-history').innerHTML = rows.slice().reverse().slice(0, 80).map((r) => `
-    <div class="history-item"><time>${r.time}<span class="who">${esc(r.account)}</span></time><div><pre class="sql">${highlight(r.query)};</pre>
-    ${r.error ? `<div class="err">${esc(r.error)}</div>` : ''}</div></div>`).join('') || '<p class="muted">No queries yet.</p>';
+  $('#sql-history').innerHTML = rows.slice().reverse().filter((r) => !isTokenLookup(r.query)).slice(0, 80).map((r) => `
+    <div class="history-item"><time>${r.time}<span class="who">${esc(r.account)}</span></time>
+      <div><pre class="sql">${highlight(prettySQL(r.query))}</pre>${r.error ? `<p class="err">${esc(r.error)}</p>` : ''}</div></div>`).join('')
+    || '<p class="muted">No queries yet.</p>';
 }
 $('#log-refresh').addEventListener('click', loadHistory);

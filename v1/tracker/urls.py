@@ -34,4 +34,6 @@ urlpatterns = [
 
     path("sqllog", api.sql_log),
     path("sql", api.run_sql),
+    path("source", api.source),
+    path("concepts", api.concepts),
 ]

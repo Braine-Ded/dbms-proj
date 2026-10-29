@@ -13,17 +13,19 @@ v1 rebuilds the v0 project (`../v0`, Go + plain SQL) as a normal website with re
 .env                    settings and every password, in plaintext
 db/00_account.sql       MySQL account the site connects as (run once, as root)
 db/01_schema.sql        database fitness_tracker_v1: 7 tables, constraints, triggers, 5 views
-db/02_seed.sql          sample data: 3 athletes + 1 staff account, 38 foods, 18 exercises, 4 weeks of logs
-db/03_demo_queries.sql  queries for the Workbench demo, including every business rule
+db/02_seed.sql          sample data: 3 athletes, an admin and a clerk, 38 foods, 18 exercises, 4 weeks of logs
+db/03_demo_queries.sql  a short Workbench demo: structure, two reports, the rules refusing bad data
+db/concepts.sql         18 examples, one per DBMS concept; the SQL tab's example list
 stride/                 Django project (settings read .env)
 tracker/models.py       models mapped onto the SQL tables and views (managed = False)
 tracker/api.py          the REST API
 tracker/admin.py        the admin panel and its dashboard
 tracker/sqlcapture.py   records the SQL behind each request; error messages for constraints and triggers
+tracker/inspector.py    the SQL tab: SQL source viewer, script runner, examples
 web/                    the website (index.html, style.css, app.js)
 run.sh                  starts everything (./run.sh --reset rebuilds the database)
 DEMO.md                 step-by-step demo script for the judges
-db/judge_queries.sql    54 ready-made queries for the judges, each naming its tables
+db/judge_queries.sql    a few extra queries for the judges: window functions, CASE, UNION, more refusals
 ```
 
 ## 1. Set up the database (once)
@@ -35,7 +37,7 @@ sudo mariadb < db/00_account.sql          # MariaDB (Arch, Debian...): root sign
 mysql -u root -p < db/00_account.sql      # MySQL with a root password
 ```
 
-This creates `stride_app` / `stride_app_pass` (same as `DB_USER` / `DB_PASSWORD` in `.env`) with every privilege on `fitness_tracker_v1` and nothing else.
+This creates `stride_app` / `stride_app_pass` (same as `DB_USER` / `DB_PASSWORD` in `.env`) with every privilege on `fitness_tracker_v1` and nothing else. The website, the admin panel and the SQL tab all connect as this one account.
 
 **b. Build and fill the database:**
 
@@ -64,7 +66,8 @@ The first start creates `.venv` and installs `requirements.txt`. Then open:
 
 | Account | Password | |
 |---|---|---|
-| `admin` | `admin12345` | staff: admin panel, SQL tab, Live SQL drawer, edits the catalogue |
+| `admin` | `admin12345` | admin: admin panel (full edit and delete), SQL tab, Live SQL drawer, edits the catalogue |
+| `clerk` | `clerk12345` | clerk: admin panel, view and add only |
 | `haadi_runs`, `lakshya_lifts`, `nishad_cycles` | `stride12345` | normal athletes with 4 weeks of logs |
 
 Or create a new account with **Create account** on the home page.
@@ -109,30 +112,44 @@ Every form and button calls the API, which writes to MySQL. Each API request is 
 | Edit profile / change password | `UPDATE Users` |
 | Delete account | `DELETE FROM Users` (its days, meals, workouts and check-ins go with it) |
 
-Signed in as staff, the **Live SQL** button (bottom right) shows the exact statements behind each click. The **SQL** tab lists every query the API ran, and has a query box.
+Signed in as an admin, the **Live SQL** button (bottom right) shows the statements behind each click, laid out to read. The **SQL** tab is described [below](#sql-tab).
 
-Constraint and trigger errors from MySQL are shown to the user as readable messages that still name the rule, so it can be pointed out in Workbench. Try: saving a second check-in for the same week ("There is already a check-in for that week (MySQL UNIQUE constraint uq_week_user_date, error 1062)"), a negative or zero quantity (CHECK), a date in the future (trigger, error 1644), or, as staff, deleting Poha (ON DELETE RESTRICT).
+Constraint and trigger errors from MySQL are shown to the user as readable messages that still name the rule, so it can be pointed out in Workbench. Try: saving a second check-in for the same week ("There is already a check-in for that week (MySQL UNIQUE constraint uq_week_user_date, error 1062)"), a negative or zero quantity (CHECK), a date in the future (trigger, error 1644), or, as an admin, deleting Poha (ON DELETE RESTRICT).
 
 The admin panel checks the same rules in its forms first, so there it shows a form error instead of a database error. The website leaves them to MySQL on purpose.
 
 ### Who can do what
 
-| | Anyone | Signed-in athlete | Staff (`is_staff = 1`) |
-|---|---|---|---|
-| Register, sign in | yes | | |
-| Own days, meals, workouts, check-ins, profile | | yes | yes, and anyone's via `?user_id=` |
-| Read the food / exercise catalogue, leaderboard | | yes | yes |
-| Edit the catalogue, list / edit / delete users | | no (403) | yes |
-| SQL tab, Live SQL drawer, admin panel | | no (403) | yes |
+`Users.role` is `athlete`, `clerk` or `admin`. `is_staff` (may open the admin panel) is a generated column, `role IN ('clerk','admin')`, so it can never disagree with the role. These roles are enforced by the Django code, not by MySQL: every request reaches the database as the one account `stride_app`.
 
-The server checks all of this. The website only hides buttons that would be refused anyway.
+| | Anyone | Athlete | Clerk | Admin |
+|---|---|---|---|---|
+| Register, sign in | yes | | | |
+| Own days, meals, workouts, check-ins, profile | | yes | yes | yes, and anyone's via `?user_id=` |
+| Read the food / exercise catalogue, leaderboard | | yes | yes | yes |
+| Edit the catalogue, list / edit / delete users on the website | | no (403) | no (403) | yes |
+| SQL tab, Live SQL drawer | | no (403) | no (403) | yes |
+| Admin panel: view every table, add rows | | no | yes | yes |
+| Admin panel: change and delete rows, see password hashes, set roles | | no | no | yes |
+
+The server checks all of this. The website only hides buttons that would be refused anyway. In the admin panel, `User.has_perm` allows a clerk only the `view_` and `add_` permissions, so Django itself hides the save and delete buttons and answers 403 to a forced request; a user a clerk adds is always an athlete. The database has its own access control too: see the next section.
+
+## SQL tab
+
+The **SQL** tab (admins only) sits next to the admin panel rather than repeating it: the admin panel is for browsing and editing data, the SQL tab shows the SQL underneath. Three tabs:
+
+* **How it's built**: the project's real SQL, piece by piece, read from the files: the MySQL account and its `GRANT` from `db/00_account.sql`, each `CREATE TABLE`, trigger and view from `db/01_schema.sql`, the hand-written queries behind the website (`tracker/api.py`, per endpoint) and the admin dashboard (`tracker/admin.py`). Each shows its file and line, a **Run it** button, and **Open in admin panel** where the admin has a page for it.
+* **Run SQL**: runs one statement or a whole script as `stride_app`, statement by statement, on a fresh MySQL connection, like Workbench. Each statement shows its kind (DDL, DML, DQL, TCL, DCL), its result, and whether a transaction is open (with its savepoints). `START TRANSACTION`, `SAVEPOINT`, `ROLLBACK TO`, `COMMIT` and `DELIMITER` work; a transaction still open at the end of a run is rolled back. **Example** loads one of the 18 examples in `db/concepts.sql`: DDL, DML, keys and CASCADE, operators, dates (`DATEDIFF()`...), aggregates, nested queries, the five joins, views, triggers and `SIGNAL`, users and `GRANT`, transactions. Each leaves the data as it found it.
+* **History**: every statement the API ran, and as whom.
+
+On MySQL 8 with binary logging on (the default), only root can create triggers, so the *Write a trigger with SIGNAL* example fails there; it works on MariaDB.
 
 ## Admin panel
 
 `/admin/`, sign in as `admin`:
 
 * **Dashboard**: athletes, active this week, days / foods / workouts logged, a 14-day chart of calories eaten vs. burnt, the leaderboard, the most logged foods and the newest accounts
-* **Users**: role badge, age, days logged, check-ins, join and last sign-in dates; filters for staff / active / join date; search. Each user's page shows the password hash, has a field to set a new password, lists the weekly check-ins, and links to that user's logs.
+* **Users**: role badge, age, days logged, check-ins, join and last sign-in dates; filters for role / active / join date; search. Each user's page shows the password hash (admins only), has a field to set a new password, lists the weekly check-ins, and links to that user's logs.
 * **Daily records**: calories in / out / net per day, filters by user and date range; each day's page lists its foods and workouts
 * **Food log / Workout log**: every `Daily_Food` / `Daily_Burn` row through the views `vw_food_log` / `vw_burn_log`, filterable by user, type and date. Read only: Django's admin can't edit tables with a composite primary key, so those rows are changed from the website.
 * **Daily summary**: the view `vw_daily_summary`, read only
@@ -143,15 +160,15 @@ The server checks all of this. The website only hides buttons that would be refu
 
 Same tables, columns, keys, constraints, triggers and views, except:
 
-* `Users` is also the login table. It gained `password` (hash), `is_staff`, `is_active`, `date_joined` and `last_login`.
+* `Users` is also the login table. It gained `password` (hash), `role`, `is_staff` (generated from `role`), `is_active`, `date_joined` and `last_login`.
 * `Users.unhashed_password` keeps a plaintext copy of each password (mock project). It is filled whenever a password is set, from sign-up, the password change and the admin panel. It is only visible in the database: the API, the views and the admin panel never show it.
 * Two new views for the admin panel: `vw_food_log`, `vw_burn_log`. `vw_user_profile` now shows the account columns too, but never the password.
 * Django adds its own tables next to these through `migrate` (`django_session`, `django_admin_log`, `django_content_type`, `django_migrations`, `auth_permission`, `auth_group*`).
-* Deleting a **staff** user from Workbench fails if they have entries in `django_admin_log` (that foreign key is RESTRICT). Delete them from the admin panel instead. Athletes can be deleted from either place.
+* Deleting an **admin or clerk** from Workbench fails if they have entries in `django_admin_log` (that foreign key is RESTRICT). Delete them from the admin panel instead. Athletes can be deleted from either place.
 
 ## REST API
 
-Every reply is `{"data": ...}` or `{"error": "..."}`, with the matching HTTP status (200, 201, 400, 401, 403, 404, 409). Staff replies also carry `"sql": [...]`. Every endpoint except the first three needs `Authorization: Bearer <access token>`.
+Every reply is `{"data": ...}` or `{"error": "..."}`, with the matching HTTP status (200, 201, 400, 401, 403, 404, 409). Admin replies also carry `"sql": [...]`. Every endpoint except the first three needs `Authorization: Bearer <access token>`.
 
 | Method | Path | |
 |---|---|---|
@@ -162,16 +179,18 @@ Every reply is `{"data": ...}` or `{"error": "..."}`, with the matching HTTP sta
 | GET / PUT / DELETE | `/api/me` | own profile; DELETE needs `password` |
 | POST | `/api/me/password` | change password |
 | GET | `/api/today` | `CURDATE()` |
-| GET / POST | `/api/users` | staff: list / create users |
-| PUT / DELETE | `/api/users/{id}` | self or staff |
-| GET / POST, PUT / DELETE | `/api/foods`, `/api/foods/{id}` | read: everyone; write: staff |
-| GET / POST, PUT / DELETE | `/api/burns`, `/api/burns/{id}` | read: everyone; write: staff |
+| GET / POST | `/api/users` | admin: list / create users |
+| PUT / DELETE | `/api/users/{id}` | self or admin |
+| GET / POST, PUT / DELETE | `/api/foods`, `/api/foods/{id}` | read: everyone; write: admin |
+| GET / POST, PUT / DELETE | `/api/burns`, `/api/burns/{id}` | read: everyone; write: admin |
 | GET | `/api/day?date=` | a day's foods, workouts and totals |
 | POST / PUT / DELETE | `/api/day/food`, `/api/day/burn` | Daily_Food / Daily_Burn (own days only) |
 | GET | `/api/summary?days=`, `/api/weekly-average`, `/api/stats` | reports for the signed-in user |
 | GET | `/api/leaderboard` | calories burnt in the last 7 days, all athletes |
 | GET / POST, DELETE | `/api/weekly`, `/api/weekly/{id}` | weekly check-ins with BMI and change |
-| GET | `/api/sqllog` | staff: the last 300 statements |
-| POST | `/api/sql` | staff: run any SQL |
+| GET | `/api/sqllog` | admin: the last 300 statements |
+| POST | `/api/sql` | admin: run a script `{script, run_as, keep_going}` |
+| GET | `/api/source` | admin: the project's SQL, piece by piece (How it's built) |
+| GET | `/api/concepts` | admin: the examples in `db/concepts.sql` |
 
-Unlike v0, the API never glues values into SQL strings. The ORM and `%s` parameters do the quoting, so it is not open to SQL injection. The staff-only SQL tab is the one exception, on purpose.
+Unlike v0, the API never glues values into SQL strings. The ORM and `%s` parameters do the quoting, so it is not open to SQL injection. The admin-only SQL tab is the one exception, on purpose.

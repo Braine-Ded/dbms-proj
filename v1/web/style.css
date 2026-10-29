@@ -153,6 +153,9 @@ main { max-width: 1400px; margin: 0 auto; padding: 28px 32px 120px; }
 .ath-stats div + div { border-left: 1px solid var(--line); }
 .ath-stats dt { font-size: .75rem; color: var(--muted); }
 .ath-stats dd { margin: 0; font: 800 1.6rem/1.1 var(--font); font-stretch: var(--condensed); }
+.body-stats { text-align: left; }
+.body-stats div + div { padding-left: 12px; }
+.body-stats + p { margin: 8px 0 0; }
 
 .rank-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; counter-reset: r; }
 .rank-list li { display: flex; gap: 8px; align-items: baseline; font-size: .9375rem; }
@@ -374,47 +377,87 @@ td.num, th.num { text-align: right; }
 .auth[data-mode="login"] #signup-form, .auth[data-mode="signup"] #login-form { display: none; }
 .auth-form a { color: var(--track-deep); font-weight: 600; }
 
-/* ------------------------------------------------------------ staff: SQL */
+/* ------------------------------------------------------------ admins: SQL */
 .role-pill { font-weight: 700; font-size: .8125rem; padding: 4px 10px; border-radius: 999px; background: var(--track-wash); color: var(--track-deep); }
-textarea { width: 100%; font-family: var(--mono); font-size: .875rem; resize: vertical; background: #FFFDF9; margin-top: 12px; }
-.sql-actions { display: flex; align-items: center; gap: 12px; margin: 10px 0 14px; }
-.presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
-.presets button { border: 1px solid var(--line-strong); background: var(--chalk); border-radius: 999px; padding: 3px 10px; font-size: .8125rem; cursor: pointer; }
-.presets button:hover { border-color: var(--track); }
-#sql-result .table-wrap { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-control); }
-#sql-result th { position: sticky; top: 0; background: var(--surface); }
-.sql-ok { color: var(--track-deep); font-weight: 600; }
+.sql-intro { max-width: 70ch; margin: -6px 0 16px; }
+.sql-intro a { color: var(--track-deep); font-weight: 600; }
+.sql-tabs { margin-bottom: 16px; }
+.sql-pane[hidden] { display: none !important; }
+
+/* SQL text, highlighted: keywords, 'strings', numbers, -- comments */
+pre.sql { margin: 0; white-space: pre-wrap; word-break: break-word; font: 400 .8125rem/1.6 var(--mono); color: var(--ink); tab-size: 4; }
+.k { color: var(--track-deep); font-weight: 600; }
+.s { color: #5F6B12; }
+.n { color: var(--turmeric-deep); }
+.c { color: var(--muted); font-style: italic; }
+
+/* How it's built: list of SQL pieces on the left, the code on the right */
+.src { display: grid; grid-template-columns: 220px minmax(0, 1fr); padding: 0; overflow: hidden; }
+.src-list { border-right: 1px solid var(--line); padding: 6px 10px 14px; max-height: 72vh; overflow: auto; }
+.src-list h4 { margin: 14px 0 4px 8px; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.src-list ul { list-style: none; margin: 0; padding: 0; }
+.src-list button { width: 100%; border: 0; background: none; text-align: left; padding: 4px 8px; border-radius: var(--r-control); cursor: pointer; font: 500 .8125rem var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.src-list button:hover { background: var(--chalk); }
+.src-list button.on { background: var(--track-wash); color: var(--track-deep); font-weight: 700; }
+.src-view { padding: 18px; min-width: 0; }
+.src-head { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 12px; }
+.src-head h3 { margin: 0 0 2px; font-family: var(--mono); font-size: 1.05rem; }
+.src-head .acts { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+pre.sql.code { background: #FFFDF9; border: 1px solid var(--line); border-radius: var(--r-control); padding: 14px 16px; max-height: 64vh; overflow: auto; }
+
+/* Run SQL */
+.run-bar { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.run-lesson { flex: 1 1 260px; }
+.run-lesson select { border: 1px solid var(--line-strong); border-radius: var(--r-control); padding: 8px 10px; background: var(--surface); color: var(--ink); font-weight: 500; width: 100%; }
+#lesson-notes { margin: 10px 0 0; max-width: 80ch; }
+textarea { width: 100%; font-family: var(--mono); font-size: .875rem; resize: vertical; background: #FFFDF9; margin-top: 12px; tab-size: 4; }
+.sql-actions { display: flex; align-items: center; gap: 12px; margin: 10px 0 6px; flex-wrap: wrap; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: .875rem; cursor: pointer; }
 .sql-err { color: var(--danger); font-weight: 600; }
 
-pre.sql { margin: 0; white-space: pre-wrap; word-break: break-word; font: 400 .8rem/1.55 var(--mono); color: #F3E4D3; }
-.k { color: #FFC94D; font-weight: 600; }
-.s { color: #9CE3B5; }
-.n { color: #F2B48F; }
+.stmt { border-top: 1px solid var(--line); padding: 12px 0; }
+.stmt-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: .8125rem; margin-bottom: 6px; }
+.stmt-head .ms { color: var(--muted); font-size: .75rem; }
+.stmt-head .ms { margin-left: auto; }
+.stmt.bad .stmt-head b { color: var(--danger); }
+.kind { font: 700 .6875rem var(--font); letter-spacing: .04em; padding: 2px 6px; border-radius: 4px; background: var(--chalk); border: 1px solid var(--line-strong); color: var(--muted); }
+.tx { font-size: .75rem; padding: 1px 8px; border-radius: 999px; background: #E3EAF3; color: #2E4A6B; font-weight: 600; }
+.stmt-err { margin: 6px 0 0; color: var(--danger); font-size: .875rem; }
+.stmt .table-wrap { max-height: 340px; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-control); margin-top: 8px; }
+.stmt th { position: sticky; top: 0; background: var(--surface); }
+.stmt td { font-size: .8125rem; padding: 5px 10px; }
+.stmt .warn { color: var(--turmeric-deep); font-size: .8125rem; margin: 4px 0 0; }
+.run-notes { margin: 8px 0 0; padding: 10px 12px; background: #E3EAF3; color: #24364F; border-radius: var(--r-control); font-size: .875rem; }
+.run-notes p { margin: 0; }
+.run-notes p + p { margin-top: 6px; }
 
-.history-item { border-top: 1px solid var(--line); padding: 10px 0; display: grid; grid-template-columns: 76px 1fr; gap: 10px; }
+/* History */
+.history-item { border-top: 1px solid var(--line); padding: 10px 0; display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
 .history-item time { font-size: .8125rem; color: var(--muted); }
 .history-item .who { display: block; color: var(--muted); font-size: .75rem; overflow-wrap: anywhere; }
-.history-item pre.sql { color: var(--ink); }
-.history-item .k { color: var(--track-deep); }
-.history-item .s { color: #6B7A1E; }
-.history-item .n { color: var(--turmeric-deep); }
-.history-item .err { color: var(--danger); font-size: .8125rem; }
+.history-item .err { color: var(--danger); font-size: .8125rem; margin: 4px 0 0; }
 
-.sql-drawer { position: fixed; right: 16px; bottom: 16px; z-index: 30; width: min(560px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: flex-end; }
-.drawer-tab { display: flex; align-items: center; gap: 8px; background: var(--ink); color: #fff; border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 700; cursor: pointer; }
+/* Live SQL drawer: the queries behind the last clicks */
+.sql-drawer { position: fixed; right: 16px; bottom: 16px; z-index: 30; width: min(520px, calc(100vw - 32px)); display: flex; flex-direction: column-reverse; align-items: flex-end; }
+.drawer-tab { display: flex; align-items: center; gap: 8px; background: var(--ink); color: #fff; border: 0; border-radius: 999px; padding: 10px 16px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 14px rgba(74, 51, 38, .25); }
 .drawer-tab .ico { color: var(--turmeric); }
 .badge { background: var(--track); color: #fff; border-radius: 999px; padding: 0 7px; font-size: .8125rem; }
 .badge.bump { animation: bump .45s ease; }
 @keyframes bump { 40% { transform: scale(1.35); } }
-.drawer-body { display: none; width: 100%; max-height: 52vh; overflow: auto; background: var(--ink); border-radius: var(--r-panel); padding: 14px 16px; margin-bottom: 10px; }
+.drawer-body { display: none; width: 100%; max-height: 60vh; overflow: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-panel); padding: 4px 16px 12px; margin-bottom: 10px; box-shadow: 0 10px 30px rgba(74, 51, 38, .18); }
 .sql-drawer[data-open="true"] .drawer-body { display: block; }
-.drawer-body .call { color: #C9B3A0; font: 600 .75rem var(--mono); margin: 12px 0 4px; }
-.drawer-body .call:first-child { margin-top: 0; }
-.drawer-body .call.bad { color: #FF9AA5; }
-.drawer-body pre.sql { border-left: 3px solid var(--track); padding-left: 10px; margin-bottom: 8px; }
-.drawer-body .empty { color: #C9B3A0; }
+.drawer-body .call { border-bottom: 1px solid var(--line); padding: 10px 0; }
+.drawer-body .call:last-child { border-bottom: 0; }
+.drawer-body h4 { display: flex; gap: 8px; margin: 0 0 6px; font: 700 .8125rem var(--mono); color: var(--ink); }
+.drawer-body h4 span { margin-left: auto; font: 400 .75rem var(--font); color: var(--muted); }
+.drawer-body .call.bad h4 { color: var(--danger); }
+.drawer-body .call-err { margin: 0 0 6px; color: var(--danger); font-size: .8125rem; }
+.drawer-body pre.sql { background: #FFFDF9; border-left: 3px solid var(--track); border-radius: 0 4px 4px 0; padding: 6px 10px; margin-top: 6px; font-size: .78rem; }
+.drawer-body .empty { color: var(--muted); margin: 10px 0 0; }
 
-/* staff-only features are hidden from everyone else; the API refuses them anyway */
+/* admin-only features are hidden from everyone else; the API refuses them anyway.
+   staff-only (the admin panel link) is for clerks and admins. */
+body:not(.is-admin) .admin-only { display: none !important; }
 body:not(.is-staff) .staff-only { display: none !important; }
 body.is-staff .athlete-only { display: none !important; }
 
@@ -437,6 +480,10 @@ body.is-staff .athlete-only { display: none !important; }
   .guide-side { position: static; max-height: none; overflow: visible; }
   .col-right { grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
   .hero-inner { grid-template-columns: 1fr; gap: 36px; padding-top: 48px; }
+}
+@media (max-width: 900px) {
+  .src { grid-template-columns: 1fr; }
+  .src-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 220px; }
 }
 @media (max-width: 760px) {
   main, .topbar-inner, .hero-inner { padding-left: 16px; padding-right: 16px; }

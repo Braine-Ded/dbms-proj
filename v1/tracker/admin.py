@@ -1,5 +1,8 @@
 """Admin panel (django-unfold theme) for browsing and editing every table.
 
+Who may do what follows Users.role (see User.has_perm): admins add, change
+and delete; clerks only view and add, and don't see password hashes.
+
 Daily_Food and Daily_Burn have composite primary keys, which the Django
 admin can't edit, so their rows are shown through the read-only views
 vw_food_log / vw_burn_log (and on each daily record's page).
@@ -25,7 +28,7 @@ from .models import (
     Burn, BurnLogEntry, DailyBurn, DailyFood, DailyRecord, DailySummary, Food, FoodLogEntry, User, WeeklyRecord,
 )
 
-admin.site.unregister(Group)  # staff = Users.is_staff, groups are not used
+admin.site.unregister(Group)  # permissions come from Users.role, groups are not used
 
 
 def kcal(value):
@@ -66,7 +69,7 @@ class UserForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["username", "user_contact", "dob", "is_staff", "is_active"]
+        fields = ["username", "user_contact", "dob", "role", "is_active"]
 
     def clean(self):
         data = super().clean()
@@ -100,26 +103,36 @@ class WeeklyInline(TabularInline):
 class UserAdmin(ModelAdmin):
     form = UserForm
     inlines = [WeeklyInline]
-    list_display = ["username", "role", "user_contact", "age_years", "days_logged", "check_ins", "joined", "last_sign_in", "is_active"]
+    list_display = ["username", "role_label", "user_contact", "age_years", "days_logged", "check_ins", "joined", "last_sign_in", "is_active"]
     list_display_links = ["username"]
-    list_filter = ["is_staff", "is_active", ("date_joined", RangeDateFilter)]
+    list_filter = ["role", "is_active", ("date_joined", RangeDateFilter)]
     list_filter_submit = True
     search_fields = ["username", "user_contact"]
     ordering = ["user_id"]
     readonly_fields = ["user_id", "password_hash", "date_joined", "last_login", "activity"]
     fieldsets = [
         ("Profile", {"fields": ["user_id", "username", "user_contact", "dob"]}),
-        ("Sign-in", {"fields": ["new_password", "password_hash", "is_active", "is_staff"]}),
+        ("Sign-in", {"fields": ["new_password", "password_hash", "is_active", "role"]}),
         ("Activity", {"fields": ["date_joined", "last_login", "activity"]}),
     ]
+
+    def get_fieldsets(self, request, obj=None):
+        if request.user.is_admin:
+            return self.fieldsets
+        # clerks: no password hash, and new users are always athletes
+        return [(name, {"fields": [f for f in opts["fields"] if f != "password_hash"]})
+                for name, opts in self.fieldsets]
+
+    def get_readonly_fields(self, request, obj=None):
+        return self.readonly_fields + ([] if request.user.is_admin else ["role"])
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(
             n_days=Count("days", distinct=True), n_weeks=Count("weeks", distinct=True))
 
-    @display(description="Role", label={"Staff": "warning", "Athlete": "primary"})
-    def role(self, obj):
-        return "Staff" if obj.is_staff else "Athlete"
+    @display(description="Role", label={"Admin": "danger", "Clerk": "warning", "Athlete": "primary"}, ordering="role")
+    def role_label(self, obj):
+        return obj.get_role_display()
 
     @display(description="Joined", ordering="date_joined")
     def joined(self, obj):
