@@ -229,7 +229,7 @@ def change_password(request):
         raise ValidationError({"current_password": ["Current password is not correct."]})
     check_password(request.data.get("new_password"), user)
     user.set_password(request.data["new_password"])
-    user.save(update_fields=["password"])
+    user.save(update_fields=["password", "unhashed_password"])
     return Response({"changed": True})
 
 

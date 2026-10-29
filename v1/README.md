@@ -143,6 +143,7 @@ The server checks all of this. The website only hides buttons that would be refu
 Same tables, columns, keys, constraints, triggers and views, except:
 
 * `Users` is also the login table. It gained `password` (hash), `is_staff`, `is_active`, `date_joined` and `last_login`.
+* `Users.unhashed_password` keeps a plaintext copy of each password (mock project). It is filled whenever a password is set, from sign-up, the password change and the admin panel. It is only visible in the database: the API, the views and the admin panel never show it.
 * Two new views for the admin panel: `vw_food_log`, `vw_burn_log`. `vw_user_profile` now shows the account columns too, but never the password.
 * Django adds its own tables next to these through `migrate` (`django_session`, `django_admin_log`, `django_content_type`, `django_migrations`, `auth_permission`, `auth_group*`).
 * Deleting a **staff** user from Workbench fails if they have entries in `django_admin_log` (that foreign key is RESTRICT). Delete them from the admin panel instead. Athletes can be deleted from either place.

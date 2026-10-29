@@ -23,7 +23,8 @@ CREATE TABLE Users (
     username      VARCHAR(50)   NOT NULL,
     user_contact  VARCHAR(100),
     dob           DATE,
-    password      VARCHAR(128)  NOT NULL,                 -- PBKDF2 hash, never the password itself
+    password      VARCHAR(128)  NOT NULL,                 -- PBKDF2 hash, used for signing in
+    unhashed_password VARCHAR(128) NULL,                  -- the same password in plaintext (mock project; never sent to the site)
     is_staff      TINYINT(1)    NOT NULL DEFAULT 0,       -- may use the admin panel
     is_active     TINYINT(1)    NOT NULL DEFAULT 1,       -- 0 = account disabled, can't sign in
     date_joined   DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,

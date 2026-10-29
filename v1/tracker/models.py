@@ -51,6 +51,7 @@ class User(AbstractBaseUser):
     is_active = models.BooleanField("active", default=True)
     date_joined = models.DateTimeField(default=datetime.now)
     # password and last_login come from AbstractBaseUser
+    unhashed_password = models.CharField(max_length=128, blank=True, null=True)  # plaintext copy, DB only
 
     objects = UserManager()
 
@@ -64,6 +65,10 @@ class User(AbstractBaseUser):
 
     def __str__(self):
         return self.username
+
+    def set_password(self, raw_password):
+        super().set_password(raw_password)
+        self.unhashed_password = raw_password
 
     @property
     def age(self):
