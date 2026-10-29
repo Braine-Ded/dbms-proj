@@ -75,6 +75,8 @@ If `pip install` fails on `mysqlclient`, your Python version is probably too new
 
 ## More
 
+* [`QUICKSTART.md`](QUICKSTART.md): the shortest path to a running site
+* [`BASIC_DEMO.md`](BASIC_DEMO.md): a 3-minute demo
 * [`v1/README.md`](v1/README.md): setup, how v1 meets each judging criterion, and the REST API reference
 * [`v1/DEMO.md`](v1/DEMO.md): step-by-step demo script for the judges
 * [`v0/README.md`](v0/README.md): the original Go version
