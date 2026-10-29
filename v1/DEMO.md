@@ -70,7 +70,7 @@ Signed in as `haadi_runs`, on **Today**:
    SELECT * FROM vw_food_log WHERE username = 'haadi_runs' AND record_date = CURDATE();
    ```
    The new row is there.
-2. Change its servings and run the query again: the row is updated. Remove the food: the row is gone.
+2. Change its servings and click **Save changes** (nothing is written until then), then run the query again: the row is updated. Remove the food: the row is gone.
 3. Add a workout, then run:
    ```sql
    SELECT * FROM vw_burn_log WHERE username = 'haadi_runs' AND record_date = CURDATE();
@@ -84,7 +84,7 @@ Signed in as `haadi_runs`, on **Today**:
 **With staff, the SQL is visible live:** sign in as `admin` in Browser A instead.
 
 * Open the **Live SQL** drawer (bottom right) and click around. Each click lists the exact `SELECT`, `INSERT`, `UPDATE` or `DELETE` statements it ran.
-* In **Food & exercise**, try to delete **Poha**. It is refused with *Can't delete: N logged entries still use it (the foreign key is ON DELETE RESTRICT).*
+* In **Food & exercise**, pick **Poha** and click **Delete**. It is refused with *Can't delete: N logged entries still use it (the foreign key is ON DELETE RESTRICT).* The **Add a food** button there writes a new row to `Food`, which then appears in the Today picker.
 
 ## 5. DB → website (2 min, Workbench + Browser A as `haadi_runs`)
 

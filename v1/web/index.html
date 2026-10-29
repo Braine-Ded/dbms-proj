@@ -182,6 +182,11 @@
             <span class="pill pill-in" id="food-total">0 kcal</span>
           </div>
           <ul class="entries" id="food-entries"></ul>
+          <div class="save-bar" data-bar="food" hidden>
+            <span>Unsaved changes</span>
+            <button class="btn btn-ghost btn-sm" data-discard>Discard</button>
+            <button class="btn btn-food btn-sm" data-save="food">Save changes</button>
+          </div>
           <form class="add-row" id="food-form">
             <select name="food_id" required aria-label="Food"></select>
             <input name="servings" type="number" min="0.25" step="0.25" value="1" required aria-label="Servings">
@@ -196,6 +201,11 @@
             <span class="pill pill-out" id="burn-total">0 kcal</span>
           </div>
           <ul class="entries" id="burn-entries"></ul>
+          <div class="save-bar" data-bar="burn" hidden>
+            <span>Unsaved changes</span>
+            <button class="btn btn-ghost btn-sm" data-discard>Discard</button>
+            <button class="btn btn-move btn-sm" data-save="burn">Save changes</button>
+          </div>
           <form class="add-row" id="burn-form">
             <select name="burn_id" required aria-label="Exercise"></select>
             <input name="duration_min" type="number" min="1" step="1" value="30" required aria-label="Minutes">
@@ -260,42 +270,54 @@
   <!-- ============================ CATALOGUE ============================ -->
   <section class="view" id="view-catalogue">
     <div class="page-head">
-      <h1>Food &amp; exercise</h1>
-      <div class="seg" id="cat-seg">
-        <button data-cat="food" class="on">Foods</button>
-        <button data-cat="burn">Exercises</button>
+      <div>
+        <h1>Food &amp; exercise</h1>
+        <p class="muted" id="cat-lede">What a serving costs, and how long it takes to burn it off.</p>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-primary staff-only" id="cat-add">Add a food</button>
+        <div class="seg" id="cat-seg">
+          <button data-cat="food" class="on">Foods</button>
+          <button data-cat="burn">Exercises</button>
+        </div>
       </div>
     </div>
-    <input class="search" id="cat-search" type="search" placeholder="Search" aria-label="Search the catalogue">
 
-    <div id="cat-food">
-      <div class="card staff-only">
-        <form class="inline-form" id="add-food-form">
-          <input type="hidden" name="food_id">
-          <label>Name<input name="name" required maxlength="100"></label>
-          <label>Type<select name="food_type"></select></label>
-          <label>kcal / serving<input name="calories_per_serving" type="number" step="1" required></label>
-          <button class="btn btn-food">Add food</button>
-          <button class="btn btn-ghost" type="reset" hidden>Cancel</button>
-        </form>
-      </div>
-      <div class="chips" id="food-chips"></div>
-      <div class="tile-grid" id="food-grid"></div>
+    <div class="card staff-only cat-editor" id="cat-editor" hidden>
+      <h3 id="cat-form-title">Add a food</h3>
+      <form class="inline-form" id="add-food-form">
+        <input type="hidden" name="food_id">
+        <label>Name<input name="name" required maxlength="100"></label>
+        <label>Type<select name="food_type"></select></label>
+        <label>kcal / serving<input name="calories_per_serving" type="number" step="1" required></label>
+        <button class="btn btn-food">Add food</button>
+        <button class="btn btn-ghost" type="reset">Cancel</button>
+      </form>
+      <form class="inline-form" id="add-burn-form" hidden>
+        <input type="hidden" name="burn_id">
+        <label>Exercise<input name="burn_name" required maxlength="100"></label>
+        <label>Type<select name="burn_type"></select></label>
+        <label>kcal / minute<input name="calories_per_min" type="number" step="0.1" required></label>
+        <button class="btn btn-move">Add exercise</button>
+        <button class="btn btn-ghost" type="reset">Cancel</button>
+      </form>
     </div>
 
-    <div id="cat-burn" hidden>
-      <div class="card staff-only">
-        <form class="inline-form" id="add-burn-form">
-          <input type="hidden" name="burn_id">
-          <label>Exercise<input name="burn_name" required maxlength="100"></label>
-          <label>Type<select name="burn_type"></select></label>
-          <label>kcal / minute<input name="calories_per_min" type="number" step="0.1" required></label>
-          <button class="btn btn-move">Add exercise</button>
-          <button class="btn btn-ghost" type="reset" hidden>Cancel</button>
-        </form>
+    <div class="guide" id="guide" data-mode="food">
+      <div class="card guide-list">
+        <div class="guide-tools">
+          <input class="search" id="cat-search" type="search" placeholder="Search foods" aria-label="Search">
+          <span class="muted small" id="cat-count"></span>
+        </div>
+        <div class="chips" id="cat-chips"></div>
+        <div class="rank-head"><span id="rank-what">Food</span><span id="rank-unit">kcal per serving</span></div>
+        <ol class="rank" id="cat-list"></ol>
       </div>
-      <div class="chips" id="burn-chips"></div>
-      <div class="tile-grid" id="burn-grid"></div>
+
+      <aside class="guide-side">
+        <div class="card guide-detail" id="cat-detail"></div>
+
+      </aside>
     </div>
   </section>
 

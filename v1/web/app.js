@@ -11,7 +11,9 @@ const VIEWS = ['today', 'progress', 'catalogue', 'account', 'sql'];
 
 const state = {
   me: null, today: null, date: null, day: null,
-  foods: [], burns: [], foodFilter: 'All', burnFilter: 'All', search: '', days: 28,
+  foods: [], burns: [], days: 28,
+  // Food & exercise page
+  catMode: 'food', catFilter: { food: 'All', burn: 'All' }, pick: { food: null, burn: null }, amount: { food: 1, burn: 30 }, search: '',
 };
 const charts = {};
 
@@ -174,7 +176,7 @@ window.addEventListener('hashchange', route);
 // coming back to the tab (e.g. from MySQL Workbench) reloads the page's data from
 // the database, unless the person is in the middle of filling in a form
 window.addEventListener('focus', () => {
-  if (state.me && !document.activeElement?.closest('form')) route();
+  if (state.me && !document.activeElement?.closest('form') && !hasUnsaved()) route();
 });
 
 // ------------------------------------------------------------------ sign in / sign up
@@ -229,7 +231,9 @@ function signedIn(r, message) {
 function signedOut(message) {
   tokens.clear();
   state.me = null;
-  Object.assign(state, { foodFilter: 'All', burnFilter: 'All', search: '', days: 28 });
+  Object.assign(state, {
+    days: 28, catMode: 'food', catFilter: { food: 'All', burn: 'All' }, pick: { food: null, burn: null }, amount: { food: 1, burn: 30 }, search: '',
+  });
   $('#cat-search').value = '';
   document.body.classList.remove('is-staff');
   Object.values(charts).forEach((c) => c.destroy());
@@ -329,7 +333,7 @@ async function loadDay() {
   $('#food-entries').innerHTML = day.foods.length ? day.foods.map((f) => `
     <li>
       <span class="entry-name">${esc(f.name)}<span class="entry-type">${f.food_type}, ${f.calories_per_serving} kcal per serving</span></span>
-      <input class="entry-qty" type="number" min="0.25" step="0.25" value="${f.servings}" data-food="${f.food_id}" aria-label="Servings of ${esc(f.name)}">
+      <input class="entry-qty" type="number" min="0.25" step="0.25" value="${f.servings}" data-food="${f.food_id}" data-orig="${f.servings}" data-per="${f.calories_per_serving}" aria-label="Servings of ${esc(f.name)}">
       <span class="entry-kcal">${kcal(f.calories)}</span>
       <button class="x-btn" data-del-food="${f.food_id}" aria-label="Remove ${esc(f.name)}">✕</button>
     </li>`).join('') : '<li class="empty">No meals logged. Pick a food below.</li>';
@@ -337,10 +341,11 @@ async function loadDay() {
   $('#burn-entries').innerHTML = day.burns.length ? day.burns.map((b) => `
     <li>
       <span class="entry-name">${esc(b.burn_name)}<span class="entry-type">${b.burn_type}, ${b.calories_per_min} kcal per minute</span></span>
-      <input class="entry-qty" type="number" min="1" step="1" value="${b.duration_min}" data-burn="${b.burn_id}" aria-label="Minutes of ${esc(b.burn_name)}">
+      <input class="entry-qty" type="number" min="1" step="1" value="${b.duration_min}" data-burn="${b.burn_id}" data-orig="${b.duration_min}" data-per="${b.calories_per_min}" aria-label="Minutes of ${esc(b.burn_name)}">
       <span class="entry-kcal">${kcal(b.calories)}</span>
       <button class="x-btn" data-del-burn="${b.burn_id}" aria-label="Remove ${esc(b.burn_name)}">✕</button>
     </li>`).join('') : '<li class="empty">No workouts yet. Rest days count too.</li>';
+  document.querySelectorAll('.save-bar').forEach((bar) => { bar.hidden = true; });
 }
 
 async function refreshDay() {
@@ -365,21 +370,43 @@ $('#burn-form').addEventListener('submit', async (e) => {
   refreshDay();
 });
 
-document.addEventListener('change', async (e) => {
+// changed servings / minutes wait for "Save changes"; the row shows its new kcal meanwhile
+const hasUnsaved = () => !!document.querySelector('.entries li.dirty');
+
+document.addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.food) {
-    await api('PUT', 'day/food', { daily_id: state.day.daily_id, food_id: t.dataset.food, servings: t.value }).catch(() => {});
-    refreshDay();
-  }
-  if (t.dataset.burn) {
-    await api('PUT', 'day/burn', { daily_id: state.day.daily_id, burn_id: t.dataset.burn, duration_min: t.value }).catch(() => {});
-    refreshDay();
-  }
+  if (!t.classList.contains('entry-qty')) return;
+  const li = t.closest('li');
+  li.classList.toggle('dirty', Number(t.value) !== Number(t.dataset.orig));
+  li.querySelector('.entry-kcal').textContent = kcal(Number(t.value) * Number(t.dataset.per));
+  const kind = t.dataset.food ? 'food' : 'burn';
+  $(`.save-bar[data-bar=${kind}]`).hidden = !$(`#${kind}-entries li.dirty`);
 });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || !e.target.classList.contains('entry-qty')) return;
+  $(`[data-save=${e.target.dataset.food ? 'food' : 'burn'}]`).click();
+});
+
+async function saveEntries(kind) {
+  const inputs = [...document.querySelectorAll(`#${kind}-entries li.dirty .entry-qty`)];
+  const bad = inputs.find((i) => !(Number(i.value) > 0));
+  if (bad) { bad.focus(); return toast(kind === 'food' ? 'Servings must be more than 0' : 'Minutes must be more than 0', 'bad'); }
+  try {
+    for (const i of inputs) {
+      if (kind === 'food') await api('PUT', 'day/food', { daily_id: state.day.daily_id, food_id: i.dataset.food, servings: i.value });
+      else await api('PUT', 'day/burn', { daily_id: state.day.daily_id, burn_id: i.dataset.burn, duration_min: i.value });
+    }
+    toast('Changes saved', 'good');
+  } finally {
+    refreshDay();
+  }
+}
 
 document.addEventListener('click', async (e) => {
   const t = e.target.closest('button');
   if (!t) return;
+  if (t.dataset.save) saveEntries(t.dataset.save);
+  if (t.hasAttribute('data-discard')) loadDay();
   if (t.dataset.delFood) {
     await api('DELETE', `day/food?daily_id=${state.day.daily_id}&food_id=${t.dataset.delFood}`);
     refreshDay();
@@ -556,8 +583,25 @@ document.addEventListener('click', async (e) => {
 });
 
 // ------------------------------------------------------------------ CATALOGUE
+// A calorie guide rather than a second place to log (Today does that): pick a
+// food to see how long each exercise takes to burn it off, or an exercise to
+// see what a workout pays for. Staff add, edit and delete items here.
 $('#add-food-form [name=food_type]').innerHTML = FOOD_TYPES.map((t) => `<option>${t}</option>`).join('');
 $('#add-burn-form [name=burn_type]').innerHTML = BURN_TYPES.map((t) => `<option>${t}</option>`).join('');
+
+const CAT = {
+  food: {
+    items: () => state.foods, id: 'food_id', name: 'name', type: 'food_type', value: 'calories_per_serving',
+    types: FOOD_TYPES, noun: 'food', unit: 'kcal per serving', form: '#add-food-form',
+    lede: 'What a serving costs, and how long it takes to burn it off.',
+  },
+  burn: {
+    items: () => state.burns, id: 'burn_id', name: 'burn_name', type: 'burn_type', value: 'calories_per_min',
+    types: BURN_TYPES, noun: 'exercise', unit: 'kcal per minute', form: '#add-burn-form',
+    lede: 'How hard each workout burns, and what it pays for.',
+  },
+};
+const fmt1 = (n) => (Math.round(n * 10) / 10).toLocaleString('en-IN');
 
 async function loadCatalogue() {
   await loadCatalogLists();
@@ -565,100 +609,161 @@ async function loadCatalogue() {
 }
 
 function renderCatalogue() {
-  const chips = (types, active, key) => ['All', ...types].map((t) =>
-    `<button class="chip ${t === active ? 'on' : ''}" data-${key}="${t}">${t}</button>`).join('');
-  $('#food-chips').innerHTML = chips(FOOD_TYPES, state.foodFilter, 'food-chip');
-  $('#burn-chips').innerHTML = chips(BURN_TYPES, state.burnFilter, 'burn-chip');
-  const q = state.search.toLowerCase();
-  const staffActions = (kind, id) => `<span class="tile-actions staff-only"><button data-edit-${kind}="${id}">Edit</button><button class="del" data-delete-${kind}="${id}">Delete</button></span>`;
+  const mode = state.catMode, c = CAT[mode];
+  $('#guide').dataset.mode = mode;
+  document.querySelectorAll('#cat-seg button').forEach((x) => x.classList.toggle('on', x.dataset.cat === mode));
+  $('#cat-lede').textContent = c.lede;
+  $('#cat-search').placeholder = `Search ${c.noun === 'food' ? 'foods' : 'exercises'}`;
+  $('#rank-what').textContent = c.noun === 'food' ? 'Food' : 'Exercise';
+  $('#rank-unit').textContent = c.unit;
+  $('#add-food-form').hidden = mode !== 'food';
+  $('#add-burn-form').hidden = mode !== 'burn';
+  $('#cat-add').textContent = mode === 'food' ? 'Add a food' : 'Add an exercise';
+  formTitle();
 
-  const foods = state.foods.filter((f) => (state.foodFilter === 'All' || f.food_type === state.foodFilter) && f.name.toLowerCase().includes(q));
-  $('#food-grid').innerHTML = foods.map((f) => `
-    <div class="tile">
-      <span class="tile-type">${f.food_type}</span>
-      <span class="tile-name">${esc(f.name)}</span>
-      <span class="tile-kcal">${f.calories_per_serving} <small>kcal per serving</small></span>
-      <button class="tile-log" data-quick-food="${f.food_id}">Add 1 serving to today</button>
-      <span class="tile-foot">Logged ${f.times_logged} times</span>
-      ${staffActions('food', f.food_id)}
-    </div>`).join('') || '<p class="muted">No foods match.</p>';
+  const filter = state.catFilter[mode];
+  $('#cat-chips').innerHTML = ['All', ...c.types].map((t) =>
+    `<button class="chip ${t === filter ? 'on' : ''}" data-cat-chip="${t}">${t}</button>`).join('');
 
-  const burns = state.burns.filter((b) => (state.burnFilter === 'All' || b.burn_type === state.burnFilter) && b.burn_name.toLowerCase().includes(q));
-  $('#burn-grid').innerHTML = burns.map((b) => `
-    <div class="tile">
-      <span class="tile-type">${b.burn_type}</span>
-      <span class="tile-name">${esc(b.burn_name)}</span>
-      <span class="tile-kcal">${b.calories_per_min} <small>kcal per minute</small></span>
-      <button class="tile-log" data-quick-burn="${b.burn_id}">Add 30 min to today</button>
-      <span class="tile-foot">Logged ${b.times_logged} times</span>
-      ${staffActions('burn', b.burn_id)}
-    </div>`).join('') || '<p class="muted">No exercises match.</p>';
+  const q = state.search.trim().toLowerCase();
+  const all = c.items();
+  const rows = all
+    .filter((i) => (filter === 'All' || i[c.type] === filter) && i[c.name].toLowerCase().includes(q))
+    .sort((x, y) => y[c.value] - x[c.value] || x[c.name].localeCompare(y[c.name]));
+  if (!all.some((i) => i[c.id] == state.pick[mode])) state.pick[mode] = rows[0]?.[c.id] ?? null;
+  const max = Math.max(1, ...all.map((i) => Number(i[c.value])));
+  $('#cat-count').textContent = `${rows.length} of ${all.length}`;
+  $('#cat-list').innerHTML = rows.map((i) => `
+    <li><button class="rank-row ${i[c.id] == state.pick[mode] ? 'on' : ''}" data-pick="${i[c.id]}">
+      <span class="rank-name">${esc(i[c.name])}<small>${i[c.type]}</small></span>
+      <span class="rank-bar"><i style="--w:${(100 * i[c.value] / max).toFixed(1)}%"></i></span>
+      <b>${fmt1(i[c.value])}</b>
+    </button></li>`).join('') || '<li class="empty">Nothing matches. Try another type or search.</li>';
+  renderDetail();
+}
+
+function renderDetail() {
+  const mode = state.catMode, c = CAT[mode];
+  const item = c.items().find((i) => i[c.id] == state.pick[mode]);
+  if (!item) { $('#cat-detail').innerHTML = '<p class="muted">Pick something from the list.</p>'; return; }
+  const food = mode === 'food';
+  $('#cat-detail').innerHTML = `
+    <span class="detail-type">${item[c.type]}</span>
+    <h2>${esc(item[c.name])}</h2>
+    <p class="muted">${fmt1(item[c.value])} ${c.unit}. ${item.times_logged ? `Logged ${item.times_logged === 1 ? 'once' : item.times_logged + ' times'} across all athletes.` : 'Nobody has logged it yet.'}</p>
+    <label class="amount">
+      <input type="number" id="cat-amount" min="${food ? 0.25 : 1}" step="${food ? 0.25 : 5}" value="${state.amount[mode]}" aria-label="${food ? 'Servings' : 'Minutes'}">
+      <span>${food ? 'serving(s)' : 'minutes'} = <b id="cat-total"></b></span>
+    </label>
+    <h3 class="effects-title">${food ? 'Fastest ways to burn it off' : 'Burns about as much as'}</h3>
+    <ol class="effects" id="cat-effects"></ol>
+    <div class="detail-actions staff-only">
+      <button class="btn btn-ghost btn-sm" data-edit-${mode}="${item[c.id]}">Edit</button>
+      <button class="btn btn-ghost btn-sm del" data-delete-${mode}="${item[c.id]}">Delete</button>
+    </div>`;
+  renderEffects(item);
+}
+
+// the part that changes as the amount is typed (keeps focus in the input)
+function renderEffects(item) {
+  const mode = state.catMode, c = CAT[mode];
+  const total = Number(item[c.value]) * (Number(state.amount[mode]) || 0);
+  $('#cat-total').textContent = kcal(total) + ' kcal';
+  const rows = mode === 'food'
+    ? state.burns.map((b) => ({ name: b.burn_name, type: b.burn_type, v: total / Number(b.calories_per_min), unit: 'min' }))
+      .sort((x, y) => x.v - y.v).slice(0, 8)
+    // the most logged real meals (a 5 kcal black coffee would dwarf every other bar)
+    : state.foods.filter((f) => f.calories_per_serving >= 50).sort((x, y) => y.times_logged - x.times_logged).slice(0, 8)
+      .map((f) => ({ name: f.name, type: f.food_type, v: total / Number(f.calories_per_serving), unit: 'serv.' }));
+  const max = Math.max(1, ...rows.map((r) => r.v));
+  $('#cat-effects').innerHTML = rows.map((r) => `
+    <li>
+      <span class="rank-name">${esc(r.name)}<small>${r.type}</small></span>
+      <span class="rank-bar"><i style="--w:${(100 * r.v / max).toFixed(1)}%"></i></span>
+      <b>${r.unit === 'min' ? kcal(r.v) : fmt1(r.v)}<small> ${r.unit}</small></b>
+    </li>`).join('');
 }
 
 $('#cat-search').addEventListener('input', (e) => { state.search = e.target.value; renderCatalogue(); });
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'cat-amount') return;
+  state.amount[state.catMode] = e.target.value;
+  const c = CAT[state.catMode];
+  renderEffects(c.items().find((i) => i[c.id] == state.pick[state.catMode]));
+});
 
 document.querySelectorAll('#cat-seg button').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('#cat-seg button').forEach((x) => x.classList.toggle('on', x === b));
-  $('#cat-food').hidden = b.dataset.cat !== 'food';
-  $('#cat-burn').hidden = b.dataset.cat !== 'burn';
+  if (b.dataset.cat === state.catMode) return;
+  $(CAT[state.catMode].form).reset();
+  state.catMode = b.dataset.cat;
+  state.search = '';
+  $('#cat-search').value = '';
+  renderCatalogue();
 }));
+
+function formTitle() {
+  const c = CAT[state.catMode];
+  const editing = $(c.form)[c.id].value;
+  $('#cat-form-title').textContent = editing ? `Edit ${c.noun}` : c.noun === 'food' ? 'Add a food' : 'Add an exercise';
+}
 
 // add / edit forms share one handler per catalogue; a hidden id switches to PUT
 function catalogueForm(formSel, idName, path, addLabel, noun) {
   const form = $(formSel);
   const submit = form.querySelector('button:not([type=reset])');
-  const cancel = form.querySelector('[type=reset]');
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(form));
     const id = data[idName];
-    if (id) await api('PUT', `${path}/${id}`, data);
-    else await api('POST', path, data);
+    const saved = id ? await api('PUT', `${path}/${id}`, data) : await api('POST', path, data);
     toast(id ? `${noun} updated` : `${noun} added`, 'good');
+    state.pick[state.catMode] = saved[idName];
     form.reset();
     await loadCatalogue();
     fillPickers();
   });
   form.addEventListener('reset', () => {
-    setTimeout(() => { form[idName].value = ''; submit.textContent = addLabel; cancel.hidden = true; });
+    setTimeout(() => { form[idName].value = ''; submit.textContent = addLabel; $('#cat-editor').hidden = true; formTitle(); });
   });
   return (item) => {
     for (const [k, v] of Object.entries(item)) if (form[k]) form[k].value = v;
     submit.textContent = 'Save changes';
-    cancel.hidden = false;
-    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    form.querySelector('input:not([type=hidden])').focus();
+    openEditor();
   };
 }
+function openEditor() {
+  $('#cat-editor').hidden = false;
+  formTitle();
+  $('#cat-editor').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  $(CAT[state.catMode].form).querySelector('input:not([type=hidden])').focus();
+}
+$('#cat-add').addEventListener('click', () => { $(CAT[state.catMode].form).reset(); setTimeout(openEditor); });
+
 const editFood = catalogueForm('#add-food-form', 'food_id', 'foods', 'Add food', 'Food');
 const editBurn = catalogueForm('#add-burn-form', 'burn_id', 'burns', 'Add exercise', 'Exercise');
 
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('button');
   if (!b) return;
-  if (b.dataset.foodChip) { state.foodFilter = b.dataset.foodChip; renderCatalogue(); }
-  if (b.dataset.burnChip) { state.burnFilter = b.dataset.burnChip; renderCatalogue(); }
-  if (b.dataset.quickFood) {
-    await api('POST', 'day/food', { date: state.today, food_id: b.dataset.quickFood, servings: 1 });
-    toast('Added to today\'s meals', 'good');
-    loadCatalogue();
-  }
-  if (b.dataset.quickBurn) {
-    await api('POST', 'day/burn', { date: state.today, burn_id: b.dataset.quickBurn, duration_min: 30 });
-    toast('Added to today\'s workouts', 'good');
-    loadCatalogue();
+  if (b.dataset.catChip) { state.catFilter[state.catMode] = b.dataset.catChip; renderCatalogue(); }
+  if (b.dataset.pick) {
+    state.pick[state.catMode] = b.dataset.pick;
+    renderCatalogue();
+    if (matchMedia('(max-width: 1080px)').matches) $('#cat-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
   if (b.dataset.editFood) editFood(state.foods.find((f) => f.food_id == b.dataset.editFood));
   if (b.dataset.editBurn) editBurn(state.burns.find((x) => x.burn_id == b.dataset.editBurn));
   if (b.dataset.deleteFood) {
     await api('DELETE', 'foods/' + b.dataset.deleteFood);
     toast('Food deleted', 'good');
-    loadCatalogue();
+    await loadCatalogue();
+    fillPickers();
   }
   if (b.dataset.deleteBurn) {
     await api('DELETE', 'burns/' + b.dataset.deleteBurn);
     toast('Exercise deleted', 'good');
-    loadCatalogue();
+    await loadCatalogue();
+    fillPickers();
   }
 });
 

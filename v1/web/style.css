@@ -264,25 +264,56 @@ td.num, th.num { text-align: right; }
 .danger-zone h3 { color: var(--danger); }
 .danger-zone .muted { margin-bottom: 12px; }
 
-/* ------------------------------------------------------------ catalogue tiles */
-.tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
-.tile {
-  background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--turmeric);
-  border-radius: var(--r-control); padding: 12px 14px; display: grid; gap: 6px; position: relative;
+/* ------------------------------------------------------------ food & exercise guide */
+.guide { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 24px; align-items: start; }
+.guide-tools { display: flex; align-items: center; gap: 12px; }
+.guide-tools .search { margin: 0; }
+.guide .chips { margin: 14px 0 10px; }
+.guide[data-mode=burn] .chip.on { background: var(--track-wash); border-color: var(--track); color: var(--track-deep); }
+.rank-head { display: flex; justify-content: space-between; font-size: .8125rem; font-weight: 600; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.rank, .effects { list-style: none; margin: 0; padding: 0; }
+.rank .empty { color: var(--muted); padding: 16px 10px; }
+.rank-row, .effects li {
+  display: grid; grid-template-columns: minmax(130px, 1.1fr) minmax(60px, 2fr) 64px; align-items: center; gap: 14px;
+  width: 100%; padding: 8px 10px; text-align: left;
 }
-#burn-grid .tile { border-left-color: var(--track); }
-.tile-type { font-size: .8125rem; font-weight: 600; color: var(--muted); }
-.tile-name { font-weight: 700; overflow-wrap: anywhere; padding-right: 76px; }
-.tile-kcal { font-weight: 800; font-stretch: var(--condensed); font-size: 1.7rem; line-height: 1; }
-.tile-kcal small { font: 500 .8125rem var(--font); color: var(--muted); }
-.tile-foot { font-size: .8125rem; color: var(--muted); }
-.tile-actions { position: absolute; top: 8px; right: 8px; display: flex; }
-.tile-actions button { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 4px 6px; border-radius: 4px; font-size: .8125rem; font-weight: 600; }
-.tile-actions button:hover { background: var(--chalk); color: var(--ink); }
-.tile-actions button.del:hover { color: var(--danger); background: var(--danger-wash); }
-.tile-log { justify-self: start; border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: .8125rem; font-weight: 700; cursor: pointer; }
-.tile-log:hover { border-color: var(--turmeric); background: var(--turmeric-wash); }
-#burn-grid .tile-log:hover { border-color: var(--track); background: var(--track-wash); }
+.rank-row { border: 0; border-radius: var(--r-control); background: none; cursor: pointer; }
+.rank-row:hover { background: var(--chalk); }
+.rank-row.on { background: var(--turmeric-wash); box-shadow: inset 3px 0 0 var(--turmeric); }
+.guide[data-mode=burn] .rank-row.on { background: var(--track-wash); box-shadow: inset 3px 0 0 var(--track); }
+.rank-name { font-weight: 600; overflow-wrap: anywhere; line-height: 1.25; }
+.rank-name small { display: block; font-weight: 400; font-size: .8125rem; color: var(--muted); }
+.rank-bar { height: 10px; border-radius: 999px; background: var(--chalk); overflow: hidden; }
+.rank-bar i { display: block; height: 100%; width: var(--w); border-radius: inherit; background: var(--turmeric); }
+.guide[data-mode=burn] .rank .rank-bar i { background: var(--track); }
+.rank-row b, .effects b { font-weight: 800; font-stretch: var(--condensed); font-size: 1.2rem; text-align: right; white-space: nowrap; }
+.effects b small { font: 500 .75rem var(--font); color: var(--muted); }
+
+.head-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cat-editor { margin-bottom: 20px; }
+.guide-side { display: grid; gap: 20px; position: sticky; top: 84px; max-height: calc(100vh - 104px); overflow-y: auto; overscroll-behavior: contain; border-radius: var(--r-panel); }
+.guide-detail h2 { font-size: 2.2rem; overflow-wrap: anywhere; margin: 2px 0 4px; }
+.detail-type { font-size: .8125rem; font-weight: 600; color: var(--muted); }
+.amount {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 6px; padding: 12px;
+  border-radius: var(--r-control); background: var(--chalk); font-weight: 600;
+}
+.amount input { width: 84px; border: 1px solid var(--line-strong); border-radius: var(--r-control); padding: 6px 8px; background: var(--surface); text-align: right; }
+.amount b { font-stretch: var(--condensed); font-size: 1.35rem; font-weight: 800; }
+.effects-title { margin: 18px 0 4px; font-size: 1.05rem; }
+.effects li { grid-template-columns: minmax(110px, 1.2fr) minmax(50px, 1.5fr) 74px; padding: 6px 0; border-top: 1px solid var(--line); }
+.effects li:first-child { border-top: 0; }
+/* a food's effects are workouts (burnt orange); an exercise's are foods (mustard) */
+.guide[data-mode=food] .effects .rank-bar i { background: var(--track); }
+.detail-actions { display: flex; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--line-strong); }
+.detail-actions .del:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-wash); }
+
+/* ------------------------------------------------------------ unsaved entry edits on Today */
+.entries li.dirty .entry-qty { border-color: var(--turmeric); background: var(--turmeric-wash); }
+.feed-move .entries li.dirty .entry-qty { border-color: var(--track); background: var(--track-wash); }
+.entries li.dirty .entry-kcal { color: var(--muted); }
+.save-bar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 10px; padding: 8px 10px; border-radius: var(--r-control); background: var(--chalk); }
+.save-bar span { margin-right: auto; font-size: .875rem; font-weight: 600; color: var(--muted); }
 
 .account-head { justify-content: flex-start; align-items: center; }
 .account-head h1 { overflow-wrap: anywhere; }
@@ -379,6 +410,8 @@ body.is-staff .athlete-only { display: none !important; }
 /* ------------------------------------------------------------ responsive */
 @media (max-width: 1080px) {
   .three-col { grid-template-columns: 230px minmax(0, 1fr); }
+  .guide { grid-template-columns: 1fr; }
+  .guide-side { position: static; max-height: none; overflow: visible; }
   .col-right { grid-column: 1 / -1; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
   .hero-inner { grid-template-columns: 1fr; gap: 36px; padding-top: 48px; }
 }
@@ -391,6 +424,7 @@ body.is-staff .athlete-only { display: none !important; }
   .entries li { gap: 6px; }
   .entry-qty { width: 60px; }
   .entry-kcal { min-width: 44px; }
+  .rank-row, .effects li { grid-template-columns: minmax(0, 1fr) 70px 56px; gap: 8px; }
   h1 { font-size: 2.2rem; }
   .field-row { grid-template-columns: 1fr; }
   .account .btn-ghost.staff-only, .me-chip span:last-child { display: none; }
