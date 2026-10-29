@@ -9,7 +9,7 @@ There are two versions of the project.
 | Backend | Go, `net/http`, plain SQL strings | Django + Django REST Framework |
 | Sign-in | Three fixed MySQL accounts (admin, clerk, viewer) | Anyone can register; passwords stored as PBKDF2 hashes in `Users` |
 | Sessions | Cookie session kept in the Go server's memory, holding that account's MySQL connection | JWT access and refresh tokens |
-| Admin | Not included | Django admin panel with the Unfold theme, at `/admin/` |
+| Admin panel | None (the admin account uses the website itself) | Django admin panel with the Unfold theme, at `/admin/` |
 | Database | `fitness_tracker` | `fitness_tracker_v1` (same schema plus account columns) |
 | Port | 8080 | 8000 |
 
