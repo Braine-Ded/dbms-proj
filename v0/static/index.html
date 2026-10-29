@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stride Fitness Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23EC5A13'/><path d='M9 22l6-12 4 8 2-4 3 8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;1,700;1,800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#today" aria-label="Stride home">
+      <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true"><rect width="32" height="32" rx="8" fill="currentColor"/><path d="M9 22l6-12 4 8 2-4 3 8" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Stride</span>
+    </a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#today" data-view="today">Today</a>
+      <a href="#progress" data-view="progress">Progress</a>
+      <a href="#catalogue" data-view="catalogue">Food &amp; exercise</a>
+      <a href="#athletes" data-view="athletes">Athletes</a>
+      <a href="#sql" data-view="sql">SQL</a>
+    </nav>
+    <label class="user-switch">
+      <span class="avatar" id="me-avatar">?</span>
+      <select id="user-select" aria-label="Current athlete"></select>
+    </label>
+    <div class="account">
+      <span class="role-pill" id="role-pill" title="MySQL account in use"></span>
+      <button class="btn btn-ghost btn-sm" id="logout">Sign out</button>
+    </div>
+  </div>
+  <p class="role-note" id="role-note" hidden></p>
+</header>
+
+<!-- sign-in: each role is a real MySQL account with its own GRANTs (db/04_users.sql) -->
+<div class="login" id="login" hidden>
+  <form class="card login-card" id="login-form">
+    <h1>Sign in</h1>
+    <p class="muted">Pick a role. The website connects to MySQL as that account, so MySQL decides what you may change.</p>
+    <div class="role-choices">
+      <label><input type="radio" name="role" value="admin" checked><span><b>Admin</b><small>ft_admin: everything, including foods, exercises and athletes</small></span></label>
+      <label><input type="radio" name="role" value="clerk"><span><b>Clerk</b><small>ft_clerk: logs meals, workouts and check-ins</small></span></label>
+      <label><input type="radio" name="role" value="viewer"><span><b>Viewer</b><small>ft_viewer: read only</small></span></label>
+    </div>
+    <label class="login-pass">Password<input type="password" name="password" required autocomplete="current-password"></label>
+    <p class="sql-err" id="login-error" hidden></p>
+    <button class="btn btn-ember">Sign in</button>
+    <p class="muted small">Passwords are in <code>.env</code> at the project root.</p>
+  </form>
+</div>
+
+<main id="app">
+
+  <!-- ============================== TODAY ============================== -->
+  <section class="view" id="view-today">
+    <div class="three-col">
+
+      <aside class="col-left">
+        <div class="card athlete-card">
+          <div class="athlete-cover"></div>
+          <span class="avatar avatar-lg" id="ath-avatar">?</span>
+          <h2 id="ath-name">—</h2>
+          <p class="muted" id="ath-meta"></p>
+          <dl class="ath-stats">
+            <div><dt>Days logged</dt><dd id="st-days">0</dd></div>
+            <div><dt>Workouts</dt><dd id="st-workouts">0</dd></div>
+            <div><dt>Active min</dt><dd id="st-minutes">0</dd></div>
+          </dl>
+        </div>
+        <div class="card">
+          <h3>Most eaten</h3>
+          <ol class="rank-list" id="top-foods"></ol>
+          <h3 class="mt">Most trained</h3>
+          <ol class="rank-list" id="top-burns"></ol>
+        </div>
+      </aside>
+
+      <div class="col-main">
+        <div class="day-nav">
+          <button class="icon-btn" id="day-prev" aria-label="Previous day">‹</button>
+          <input type="date" id="day-date" aria-label="Day">
+          <button class="icon-btn" id="day-next" aria-label="Next day">›</button>
+          <span class="day-label" id="day-label"></span>
+        </div>
+
+        <div class="card balance">
+          <div class="balance-head">
+            <div>
+              <p class="balance-caption">Net calories</p>
+              <p class="balance-number"><span id="bal-net">0</span><small>kcal</small></p>
+            </div>
+            <div class="balance-split">
+              <div><span class="dot dot-in"></span>Eaten <b id="bal-in">0</b></div>
+              <div><span class="dot dot-out"></span>Burnt <b id="bal-out">0</b></div>
+            </div>
+          </div>
+          <div class="tug" aria-hidden="true">
+            <div class="tug-in" id="tug-in"></div>
+            <div class="tug-out" id="tug-out"></div>
+          </div>
+          <p class="balance-note" id="bal-note"></p>
+        </div>
+
+        <div class="card feed">
+          <div class="feed-head">
+            <h3><svg class="ico" viewBox="0 0 24 24"><path d="M7 2v9a3 3 0 0 0 3 3v8M7 2v6M10 2v6M4 2v6a3 3 0 0 0 3 3M17 22V2c-2.5 1.5-4 4-4 8h4"/></svg>Food log</h3>
+            <span class="pill pill-in" id="food-total">0 kcal</span>
+          </div>
+          <ul class="entries" id="food-entries"></ul>
+          <form class="add-row can-write" id="food-form">
+            <select name="food_id" required aria-label="Food"></select>
+            <input name="servings" type="number" min="0.25" step="0.25" value="1" required aria-label="Servings">
+            <span class="unit">serv.</span>
+            <button class="btn btn-ember">Add food</button>
+          </form>
+        </div>
+
+        <div class="card feed">
+          <div class="feed-head">
+            <h3><svg class="ico" viewBox="0 0 24 24"><path d="M6.5 6.5h11M6.5 17.5h11M3 9.5v5M21 9.5v5M6 5v14M18 5v14"/></svg>Workouts</h3>
+            <span class="pill pill-out" id="burn-total">0 kcal</span>
+          </div>
+          <ul class="entries" id="burn-entries"></ul>
+          <form class="add-row can-write" id="burn-form">
+            <select name="burn_id" required aria-label="Exercise"></select>
+            <input name="duration_min" type="number" min="1" step="1" value="30" required aria-label="Minutes">
+            <span class="unit">min</span>
+            <button class="btn btn-pine">Add workout</button>
+          </form>
+        </div>
+      </div>
+
+      <aside class="col-right">
+        <div class="card">
+          <h3>Last 14 days</h3>
+          <div class="streak" id="streak"></div>
+          <p class="muted small">Green circles grow with calories burnt. Orange is a rest day, dashed means nothing was logged.</p>
+        </div>
+        <div class="card">
+          <h3>This week's leaderboard</h3>
+          <ol class="leader" id="leaderboard"></ol>
+        </div>
+        <div class="card">
+          <h3>Weight</h3>
+          <div class="mini-chart"><canvas id="mini-weight"></canvas></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============================ PROGRESS ============================= -->
+  <section class="view" id="view-progress">
+    <div class="page-head">
+      <h1>Progress</h1>
+      <div class="seg" id="range-seg">
+        <button data-days="7">7 days</button>
+        <button data-days="14">14 days</button>
+        <button data-days="28" class="on">28 days</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Calories in vs. out</h3>
+      <div class="big-chart"><canvas id="chart-balance"></canvas></div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <h3>Weekly averages</h3>
+        <div class="table-wrap"><table id="weekly-avg-table"></table></div>
+      </div>
+      <div class="card">
+        <h3>Body measurements</h3>
+        <div class="mid-chart"><canvas id="chart-weight"></canvas></div>
+        <form class="inline-form can-write" id="weekly-form">
+          <label>Week starting<input type="date" name="week_start_date" required></label>
+          <label>Height (cm)<input type="number" name="height_cm" step="0.1" min="1" required></label>
+          <label>Weight (kg)<input type="number" name="weight_kg" step="0.1" min="1" required></label>
+          <button class="btn btn-pine">Save check-in</button>
+        </form>
+        <div class="table-wrap"><table id="weekly-table"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CATALOGUE ============================ -->
+  <section class="view" id="view-catalogue">
+    <div class="page-head">
+      <h1>Food &amp; exercise</h1>
+      <div class="seg" id="cat-seg">
+        <button data-cat="food" class="on">Foods</button>
+        <button data-cat="burn">Exercises</button>
+      </div>
+    </div>
+
+    <div id="cat-food">
+      <div class="card admin-only">
+        <form class="inline-form" id="add-food-form">
+          <input type="hidden" name="food_id">
+          <label>Name<input name="name" required maxlength="100"></label>
+          <label>Type<select name="food_type"></select></label>
+          <label>kcal / serving<input name="calories_per_serving" type="number" step="1" required></label>
+          <button class="btn btn-ember">Add food</button>
+          <button class="btn btn-ghost" type="reset" hidden>Cancel</button>
+        </form>
+      </div>
+      <div class="chips" id="food-chips"></div>
+      <div class="tile-grid" id="food-grid"></div>
+    </div>
+
+    <div id="cat-burn" hidden>
+      <div class="card admin-only">
+        <form class="inline-form" id="add-burn-form">
+          <input type="hidden" name="burn_id">
+          <label>Exercise<input name="burn_name" required maxlength="100"></label>
+          <label>Type<select name="burn_type"></select></label>
+          <label>kcal / minute<input name="calories_per_min" type="number" step="0.1" required></label>
+          <button class="btn btn-pine">Add exercise</button>
+          <button class="btn btn-ghost" type="reset" hidden>Cancel</button>
+        </form>
+      </div>
+      <div class="chips" id="burn-chips"></div>
+      <div class="tile-grid" id="burn-grid"></div>
+    </div>
+  </section>
+
+  <!-- ============================ ATHLETES ============================= -->
+  <section class="view" id="view-athletes">
+    <div class="banner">
+      <div class="banner-text">
+        <h1>Athletes</h1>
+        <p>Everyone logging meals and workouts here. Deleting an athlete also removes all of their days and check-ins.</p>
+      </div>
+    </div>
+    <div class="card admin-only">
+      <form class="inline-form" id="user-form">
+        <input type="hidden" name="user_id">
+        <label>Username<input name="username" required maxlength="50"></label>
+        <label>Contact<input name="user_contact" maxlength="100" placeholder="email or phone"></label>
+        <label>Date of birth<input name="dob" type="date"></label>
+        <button class="btn btn-ember">Add athlete</button>
+        <button class="btn btn-ghost" type="reset" hidden>Cancel</button>
+      </form>
+    </div>
+    <div class="athlete-grid" id="athlete-grid"></div>
+  </section>
+
+  <!-- =============================== SQL =============================== -->
+  <section class="view" id="view-sql">
+    <div class="page-head"><h1>SQL playground</h1></div>
+    <div class="card">
+      <p class="muted">Runs straight against the <code>fitness_tracker</code> database as <code id="sql-account">your account</code>, exactly like MySQL Workbench. Anything outside your GRANTs is refused by MySQL.</p>
+      <div class="presets" id="presets"></div>
+      <textarea id="sql-input" spellcheck="false" rows="6">SELECT * FROM vw_daily_summary ORDER BY record_date DESC LIMIT 10;</textarea>
+      <div class="sql-actions">
+        <button class="btn btn-ember" id="sql-run">Run query</button>
+        <span class="muted small">Ctrl + Enter</span>
+      </div>
+      <div id="sql-result"></div>
+    </div>
+    <div class="card">
+      <div class="feed-head"><h3>Every query the app has run</h3><button class="btn btn-ghost" id="log-refresh">Refresh</button></div>
+      <div id="sql-history"></div>
+    </div>
+  </section>
+</main>
+
+<!-- live SQL drawer: shows the statements behind the last action -->
+<aside class="sql-drawer" id="drawer" data-open="false">
+  <button class="drawer-tab" id="drawer-toggle" aria-expanded="false">
+    <svg class="ico" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>
+    Live SQL <span class="badge" id="drawer-count">0</span>
+  </button>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
